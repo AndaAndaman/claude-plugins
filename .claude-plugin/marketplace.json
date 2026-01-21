@@ -1,0 +1,15 @@
+{
+  "name": "flowaccount-dev-tools",
+  "owner": {
+    "name": "Andaman N.",
+    "email": "andaman_n@flowaccount.com"
+  },
+  "plugins": [
+    {
+      "name": "ask-before-code",
+      "source": "./plugins/ask-before-code",
+      "description": "Forces clarity before coding to prevent wasted work. Ask 3 questions now, save 3 hours later.",
+      "version": "0.1.0"
+    }
+  ]
+}

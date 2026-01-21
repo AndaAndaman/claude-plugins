@@ -1,0 +1,11 @@
+{
+  "name": "ask-before-code",
+  "version": "0.1.0",
+  "description": "Forces clarity before coding to prevent wasted work. Ask 3 questions now, save 3 hours later.",
+  "author": {
+    "name": "FlowAccount Developer",
+    "email": "dev@flowaccount.com"
+  },
+  "keywords": ["requirements", "clarification", "productivity", "developer-experience", "workflow"],
+  "license": "MIT"
+}

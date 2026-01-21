@@ -1,0 +1,23 @@
+# Editor directories and files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node modules (if you add any tooling)
+node_modules/
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+
+**/CLAUDE.md
+nul

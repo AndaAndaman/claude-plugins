@@ -4,12 +4,47 @@
     "name": "Andaman N.",
     "email": "andaman_n@flowaccount.com"
   },
+  "metadata": {
+    "description": "A curated plugin marketplace for Claude Code containing development tools and productivity plugins specifically designed for FlowAccount developers.",
+    "version": "1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AndaAndaman/claude-plugins"
+  },
+  "homepage": "https://github.com/AndaAndaman/claude-plugins",
+  "license": "MIT",
+  "keywords": [
+    "flowaccount",
+    "productivity",
+    "code-quality",
+    "developer-experience",
+    "workflow",
+    "typescript",
+    "angular",
+    "dotnet",
+    "refactoring"
+  ],
   "plugins": [
     {
       "name": "ask-before-code",
-      "source": "./plugins/ask-before-code",
+      "version": "0.1.0",
       "description": "Forces clarity before coding to prevent wasted work. Ask 3 questions now, save 3 hours later.",
-      "version": "0.1.0"
+      "source": "./plugins/ask-before-code",
+      "author": {
+        "name": "FlowAccount Developer",
+        "email": "dev@flowaccount.com"
+      }
+    },
+    {
+      "name": "quick-wins",
+      "version": "0.1.0",
+      "description": "Identifies and guides easy code improvements. Small improvements, big impact.",
+      "source": "./plugins/quick-wins",
+      "author": {
+        "name": "FlowAccount Developer",
+        "email": "dev@flowaccount.com"
+      }
     }
   ]
 }

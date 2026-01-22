@@ -1,0 +1,11 @@
+{
+  "name": "quick-wins",
+  "version": "0.1.0",
+  "description": "Identifies and guides easy code improvements. Small improvements, big impact.",
+  "author": {
+    "name": "FlowAccount Developer",
+    "email": "dev@flowaccount.com"
+  },
+  "keywords": ["code-quality", "refactoring", "productivity", "developer-experience", "code-review"],
+  "license": "MIT"
+}

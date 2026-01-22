@@ -1,0 +1,5 @@
+# Plugin-specific ignores
+.claude/*.local.md
+*.log
+node_modules/
+.DS_Store

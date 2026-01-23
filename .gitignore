@@ -19,5 +19,7 @@ node_modules/
 .env
 .env.local
 
+# Ignore CLAUDE.md in subdirectories, but keep the root one
 **/CLAUDE.md
+!/CLAUDE.md
 nul

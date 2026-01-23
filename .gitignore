@@ -23,3 +23,4 @@ node_modules/
 **/CLAUDE.md
 !/CLAUDE.md
 nul
+.claude/settings.local.json

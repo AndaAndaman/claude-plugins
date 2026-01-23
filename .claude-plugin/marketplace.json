@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "A curated plugin marketplace for Claude Code containing development tools and productivity plugins specifically designed for FlowAccount developers.",
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "repository": {
     "type": "git",
@@ -28,8 +28,8 @@
   "plugins": [
     {
       "name": "ask-before-code",
-      "version": "0.1.1",
-      "description": "Forces clarity before coding to prevent wasted work. Ask 3 questions now, save 3 hours later.",
+      "version": "0.2.0",
+      "description": "Encourages clarity before coding to prevent wasted work. Ask 3 questions now, save 3 hours later.",
       "source": "./plugins/ask-before-code",
       "author": {
         "name": "FlowAccount Developer",
@@ -38,7 +38,7 @@
     },
     {
       "name": "quick-wins",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "description": "Identifies and guides easy code improvements. Small improvements, big impact.",
       "source": "./plugins/quick-wins",
       "author": {

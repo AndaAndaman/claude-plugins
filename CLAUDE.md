@@ -47,8 +47,6 @@ claude-plugins/
 │   │   │   └── clarity-guardian.md
 │   │   ├── commands/
 │   │   │   └── clarify.md
-│   │   ├── hooks/
-│   │   │   └── hooks.json        # PreToolUse hook (Write/Edit)
 │   │   └── skills/
 │   │       └── request-clarification/
 │   └── quick-wins/
@@ -71,22 +69,23 @@ claude-plugins/
 
 ### ask-before-code Plugin
 
-**Purpose:** Enforces requirement clarity before coding to prevent wasted development effort.
+**Purpose:** Encourages requirement clarity before coding to prevent wasted development effort.
 
 **Components:**
 - **Clarity Guardian Agent** - Autonomous agent that detects vague requests and triggers clarification
 - **/clarify Command** - Manual requirement gathering with optional topic parameter
-- **PreToolUse Hook** - Blocks Write/Edit tools when requirements unclear (uses prompt-based evaluation)
 - **request-clarification Skill** - Core methodology for systematic requirement gathering
 
-**Hook Response Format:**
-- Hooks must return `{"ok": true}` to allow or `{"ok": false, "systemMessage": "..."}` to block
-- PreToolUse hook evaluates requirement clarity checklist (60% threshold for warning, 80% for pass)
-- Smart exceptions: Always allows docs, tests, config files, typo fixes, formatting changes
+**Design Philosophy:**
+- **Helper, not blocker** - Provides guidance without enforcing strict rules
+- Agent triggers proactively when detecting unclear requirements
+- Users maintain control - can skip clarification if context is already clear
+- No hooks that block legitimate work
 
 **Key Files:**
-- `plugins/ask-before-code/hooks/hooks.json` - Contains prompt-based PreToolUse hook logic
 - `plugins/ask-before-code/agents/clarity-guardian.md` - Agent frontmatter and system prompt
+- `plugins/ask-before-code/commands/clarify.md` - Command implementation
+- `plugins/ask-before-code/skills/request-clarification/` - Methodology and examples
 
 ### quick-wins Plugin
 

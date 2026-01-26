@@ -203,7 +203,7 @@ def main():
 
             result = {
                 'decision': 'block',
-                'reason': f'IMPORTANT: Before stopping, you MUST use the Skill tool to invoke "quick-wins" to scan these modified files for code quality improvements: {file_list}. This is required by the quick-wins plugin.'
+                'reason': f'IMPORTANT: Before stopping, you MUST use the Skill tool to invoke "quick-wins" Skill(quick-wins:quick-wins) to scan these modified files for code quality improvements: {file_list}. This is required by the quick-wins plugin.'
             }
             print(json.dumps(result))
         else:

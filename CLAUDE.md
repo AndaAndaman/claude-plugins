@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-This is a Claude Code plugin marketplace repository containing productivity plugins for FlowAccount developers. The repository hosts two production plugins that enhance the Claude Code development workflow:
+This is a Claude Code plugin marketplace repository containing productivity plugins for FlowAccount developers. The repository hosts three production plugins that enhance the Claude Code development workflow:
 
-1. **ask-before-code** (v0.1.1) - Prevents wasted development by enforcing requirement clarity
-2. **quick-wins** (v0.1.1) - Maintains code quality through systematic easy improvements
+1. **ask-before-code** (v0.2.0) - Prevents wasted development by encouraging requirement clarity
+2. **quick-wins** (v0.1.3) - Maintains code quality through systematic easy improvements
+3. **md-to-skill** (v0.1.1) - Converts markdown files into organized Claude skills
 
 ## Official Documentation References
 
@@ -49,19 +50,30 @@ claude-plugins/
 │   │   │   └── clarify.md
 │   │   └── skills/
 │   │       └── request-clarification/
-│   └── quick-wins/
+│   ├── quick-wins/
+│   │   ├── .claude-plugin/
+│   │   │   └── plugin.json
+│   │   ├── agents/
+│   │   │   └── quick-wins-scanner.md
+│   │   ├── commands/
+│   │   │   ├── quick-wins.md
+│   │   │   └── apply-win.md
+│   │   ├── hooks/
+│   │   │   └── hooks.json        # Stop hook
+│   │   └── skills/
+│   │       ├── code-quality-checks/
+│   │       └── refactoring-patterns/
+│   └── md-to-skill/
 │       ├── .claude-plugin/
 │       │   └── plugin.json
 │       ├── agents/
-│       │   └── quick-wins-scanner.md
+│       │   └── skill-builder.md
 │       ├── commands/
-│       │   ├── quick-wins.md
-│       │   └── apply-win.md
-│       ├── hooks/
-│       │   └── hooks.json        # Stop hook
+│       │   ├── convert-to-skill.md
+│       │   └── learn-skill.md
 │       └── skills/
-│           ├── code-quality-checks/
-│           └── refactoring-patterns/
+│           ├── markdown-parsing/
+│           └── skill-structure-patterns/
 └── README.md
 ```
 
@@ -115,6 +127,31 @@ claude-plugins/
 - `plugins/quick-wins/agents/quick-wins-scanner.md` - Agent that performs quality scanning
 - `plugins/quick-wins/skills/refactoring-patterns/references/` - Language-specific pattern libraries
 
+### md-to-skill Plugin
+
+**Purpose:** Converts markdown files (from LLM exports, documentation, or manual creation) into organized Claude Code skills.
+
+**Components:**
+- **skill-builder Agent** - Autonomous agent that analyzes markdown, generates skill structure, and validates quality
+- **/convert-to-skill Command** - Converts a single markdown file into a skill
+- **/learn-skill Command** - Scans directory for markdown files and batch converts selected files
+- **markdown-parsing Skill** - Techniques for parsing markdown structure
+- **skill-structure-patterns Skill** - Best practices for Claude skills with templates and examples
+
+**Key Features:**
+- Automatic name generation (3 options based on content)
+- Progressive disclosure (lean SKILL.md, detailed references/)
+- Code block extraction to examples/
+- Quality validation and auto-fixes
+- Intelligent merging with existing skills
+- User/project scope selection
+
+**Key Files:**
+- `plugins/md-to-skill/agents/skill-builder.md` - Agent that handles conversion workflow
+- `plugins/md-to-skill/commands/convert-to-skill.md` - Single file conversion
+- `plugins/md-to-skill/commands/learn-skill.md` - Batch conversion with content analysis
+- `plugins/md-to-skill/skills/skill-structure-patterns/` - Templates and examples for skill creation
+
 ## Development Workflow
 
 ### Testing Plugins Locally
@@ -135,12 +172,15 @@ cp -r plugins/ask-before-code /path/to/project/.claude/
 When editing plugin components:
 
 1. **Agent files** (`agents/*.md`) - YAML frontmatter + markdown system prompt
-   - Frontmatter: name, description, capabilities, trigger_patterns, tools, model, color
+   - Frontmatter: name, description (with `<example>` blocks), model, color, tools
    - Body: System prompt for the agent
+   - **IMPORTANT:** Agent descriptions must include `<example>` blocks showing triggering conditions
+   - Format: `<example>`, `Context:`, `user:`, `assistant:`, `<commentary>`
 
 2. **Command files** (`commands/*.md`) - YAML frontmatter + markdown instructions
-   - Frontmatter: description, arguments (optional)
+   - Frontmatter: name, description, arguments (optional), allowed-tools
    - Body: Instructions for executing the command
+   - Use `Task(agent-name)` syntax to invoke agents (not structured parameters)
 
 3. **Hook files** (`hooks/hooks.json`) - JSON configuration
    - Hooks can be bash commands or prompt-based (LLM evaluation)
@@ -215,6 +255,12 @@ These plugins are specifically designed for FlowAccount development workflows:
 - Works alongside MCP agents (software-engineer, architect, security-scanner)
 - Respects FlowAccount coding conventions and architecture patterns
 
+**md-to-skill:**
+- Helps document FlowAccount-specific patterns and knowledge
+- Converts team documentation into reusable skills
+- Supports both user-wide and project-specific skill installation
+- Maintains progressive disclosure for easy skill maintenance
+
 ## Key Concepts
 
 ### Plugin Components Hierarchy
@@ -258,3 +304,88 @@ Common issues:
 - Incorrect hook event name → Hook never triggers
 
 **If you encounter schema validation errors:** Consult https://code.claude.com/docs/en/hooks.md to verify the expected response format hasn't changed.
+
+## Common Development Tasks
+
+### Testing a Plugin Before Publishing
+
+```bash
+# Test plugin in isolation
+claude --plugin-dir ./plugins/md-to-skill
+
+# Test multiple plugins together
+claude --plugin-dir ./plugins/ask-before-code --plugin-dir ./plugins/quick-wins
+```
+
+### Version Synchronization
+
+When releasing a new plugin version:
+1. Update `plugins/{plugin-name}/.claude-plugin/plugin.json` - Change `version` field
+2. Update `.claude-plugin/marketplace.json` - Change `version` field in plugins array
+3. Commit both changes together to keep versions synchronized
+
+### Adding a New Plugin to Marketplace
+
+After creating a new plugin in `plugins/`:
+1. Add entry to `.claude-plugin/marketplace.json` in the `plugins` array:
+```json
+{
+  "name": "plugin-name",
+  "version": "0.1.0",
+  "description": "Brief description",
+  "source": "./plugins/plugin-name",
+  "author": {
+    "name": "FlowAccount Developer",
+    "email": "dev@flowaccount.com"
+  }
+}
+```
+2. Update README.md to document the new plugin
+3. Test with `claude --plugin-dir ./plugins/plugin-name`
+
+## Plugin Component Patterns
+
+### Agent Description Pattern (REQUIRED)
+
+Agent descriptions MUST include `<example>` blocks. This is the official pattern:
+
+```yaml
+description: Use this agent when the user asks to "[phrase 1]", "[phrase 2]"... Examples:
+
+  <example>
+  Context: Brief context about the scenario
+  user: "User's request that triggers the agent"
+  assistant: "I'll use the agent-name agent to handle this."
+  <commentary>
+  Explanation of why the agent should trigger.
+  </commentary>
+  </example>
+```
+
+### Task Tool Invocation Pattern
+
+Commands should invoke agents using simple syntax:
+```markdown
+Launch the agent to handle this task:
+
+Task(agent-name)
+```
+
+**NOT** this (incorrect):
+```markdown
+Task(
+  subagent_type="agent-name",
+  description="...",
+  prompt="..."
+)
+```
+
+### Hook Response Pattern
+
+All hooks must return exactly this structure:
+```json
+{"ok": true}  // Allow the action
+{"ok": false, "systemMessage": "Reason"}  // Block the action
+```
+
+No other fields (`hookSpecificOutput`, `permissionDecision`) are valid.

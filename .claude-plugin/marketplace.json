@@ -52,7 +52,7 @@
     },
     {
       "name": "md-to-skill",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "description": "Convert LLM-generated markdown files into organized Claude skills with automatic structure analysis, quality validation, and intelligent content merging.",
       "source": "./plugins/md-to-skill",
       "author": {

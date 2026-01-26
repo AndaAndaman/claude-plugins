@@ -528,4 +528,41 @@ Focus on making skills easy to trigger (strong phrases), quick to load (lean SKI
 
 ## Additional Resources
 
-See `references/` and `examples/` for detailed templates, patterns, and real-world examples from production plugins.
+### Comprehensive Guides
+
+For step-by-step workflows and detailed guidance:
+- **`references/skill-creation-process.md`** - Complete 6-step process for creating skills from understanding to iteration, with real examples from production skills
+- **`references/common-mistakes.md`** - Catalog of 7 common mistakes with before/after examples and fix strategies
+
+### Templates and Patterns
+
+For templates and format references:
+- **`references/skill-template.md`** - Fill-in-the-blank SKILL.md template
+- **`references/description-templates.md`** - Trigger phrase templates by category
+
+### Working Examples
+
+For real-world skill examples:
+- **`examples/simple-skill/`** - Complete simple skill example
+- **`examples/complex-skill/`** - Complete complex skill example with references/, examples/, and scripts/
+
+### Progressive Disclosure Deep Dive
+
+The skill creation process reference includes:
+- Three-tier loading system with context costs
+- Anatomy of a skill (what goes where)
+- Resource planning strategies
+- Content organization patterns
+- Validation and testing procedures
+- Iteration workflows
+
+### Common Pitfalls
+
+The common mistakes reference covers:
+- Weak trigger descriptions (with fixes)
+- Too much content in SKILL.md (refactoring guide)
+- Second-person writing (conversion patterns)
+- Missing resource references (templates)
+- Poor file naming (conventions)
+- Incomplete examples (completion checklist)
+- No progressive disclosure (reorganization process)

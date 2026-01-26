@@ -1,0 +1,14 @@
+{
+  "PreToolUse": [
+    {
+      "matcher": "Write|Edit",
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "Evaluate whether the requirements for the code being written are sufficiently clear. Requirements are clear if they specify: (1) what module/component is affected, (2) which users/entities are referenced (if applicable), and (3) what success looks like. Return {\"ok\": true} if requirements are clear, otherwise return {\"ok\": false, \"systemMessage\": \"Requirements unclear - please clarify [specific gap]\"} with details about what needs clarification.",
+          "timeout": 10000
+        }
+      ]
+    }
+  ]
+}

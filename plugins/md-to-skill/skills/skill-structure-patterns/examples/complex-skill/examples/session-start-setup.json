@@ -1,0 +1,13 @@
+{
+  "SessionStart": [
+    {
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "Initialize session by checking project context. Verify: (1) working directory is a valid project, (2) git repository is initialized if needed, (3) required configuration files exist. Return {\"ok\": true} if session is ready, otherwise {\"ok\": false, \"systemMessage\": \"Session setup incomplete - [specific issue]\"} with details about what needs attention.",
+          "timeout": 10000
+        }
+      ]
+    }
+  ]
+}

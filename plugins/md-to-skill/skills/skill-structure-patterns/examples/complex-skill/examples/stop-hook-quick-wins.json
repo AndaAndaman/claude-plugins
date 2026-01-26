@@ -1,0 +1,13 @@
+{
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "Evaluate whether significant code changes were made in this session (check for Write, Edit, or Bash git commit in recent actions). If significant changes were made, check if code quality improvements (quick wins) would be valuable. Return {\"ok\": true} to trigger quick wins scan if: (1) code was written/edited, AND (2) no scan was recently performed, AND (3) changes are substantial (not just typo fixes). Otherwise return {\"ok\": false} to skip the scan. When triggering scan, include {\"systemMessage\": \"Scanning for code quality improvements...\"}",
+          "timeout": 10000
+        }
+      ]
+    }
+  ]
+}

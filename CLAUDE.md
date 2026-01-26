@@ -194,17 +194,29 @@ When editing plugin components:
 
 ### Hook Response Schema
 
-**CRITICAL:** All hooks must return JSON with `ok` field:
+**CRITICAL:** Response schema depends on hook type:
 
+**Prompt-Based Hooks** (like quick-wins):
 ```json
 // Allow the action
 {"ok": true}
 
 // Block the action with message
-{"ok": false, "systemMessage": "Explanation for user"}
+{"ok": false, "reason": "Explanation for Claude"}
 ```
 
-**Common Mistake:** Do NOT return `hookSpecificOutput` or `permissionDecision` - these are invalid and will cause schema validation errors.
+**Command-Based Hooks** (advanced JSON output for Stop hooks):
+```json
+// Allow the action - exit 0 with no output
+// Block the action
+{"decision": "block", "reason": "Explanation for Claude"}
+```
+
+**Field requirements:**
+- Prompt-based hooks: Use `reason` field (REQUIRED when ok=false)
+- Command-based hooks: Use `decision` and `reason` fields
+- The `reason` field is shown to Claude to guide next steps
+- Do NOT use `systemMessage`, `hookSpecificOutput`, or `permissionDecision` for basic Stop hooks
 
 **Reference:** Always check https://code.claude.com/docs/en/hooks.md for the current hook response schema specification.
 
@@ -382,10 +394,16 @@ Task(
 
 ### Hook Response Pattern
 
-All hooks must return exactly this structure:
+Prompt-based hooks (type: "prompt") must return:
 ```json
 {"ok": true}  // Allow the action
-{"ok": false, "systemMessage": "Reason"}  // Block the action
+{"ok": false, "reason": "Explanation for Claude"}  // Block the action
 ```
 
-No other fields (`hookSpecificOutput`, `permissionDecision`) are valid.
+Command-based hooks (type: "command") with advanced JSON output:
+```json
+{"decision": "block", "reason": "Explanation for Claude"}  // Block the action
+// Or exit 0 with no output to allow the action
+```
+
+The `reason` field is shown to Claude (not the user) to help guide the next steps.

@@ -7,8 +7,8 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "RESPOND WITH JSON ONLY. NO OTHER TEXT.\n\nContext: $ARGUMENTS\n\nEvaluate if a quick wins code quality scan should run:\n\n1. Significant code changes?\n   - Check for Write/Edit/NotebookEdit tools with code files (.ts, .js, .cs)\n   - Ignore docs-only changes (.md, .txt)\n\n2. Appropriate timing?\n   - SKIP if: urgent/critical/hotfix mentioned, trivial changes, user said \"skip scan\"\n   - PROCEED for: feature work, refactoring, new code\n\n3. Supported technology?\n   - PROCEED: TypeScript, JavaScript, Angular, C#/.NET\n   - SKIP: Other languages\n\nRESPOND WITH ONLY ONE OF THESE JSON FORMATS:\n\nTo trigger scan:\n{\"ok\": false, \"reason\": \"Brief explanation\"}\n\nTo skip scan:\n{\"ok\": true}\n\nYOUR RESPONSE MUST BE VALID JSON. NO EXPLANATORY TEXT. NO CODE FENCES. JUST THE JSON OBJECT.",
-            "timeout": 10000
+            "prompt": "Output ONLY valid JSON, nothing else.\n\nIf .ts/.js/.cs files were edited, output:\n{\"ok\":false,\"reason\":\"scan needed\"}\n\nOtherwise output:\n{\"ok\":true}",
+            "timeout": 10
           }
         ]
       }

@@ -3,11 +3,10 @@
   "hooks": {
     "Stop": [
       {
-        "matcher": "*",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Output ONLY valid JSON, nothing else.\n\nIf .ts/.js/.cs files were edited, output:\n{\"ok\":false,\"reason\":\"scan needed\"}\n\nOtherwise output:\n{\"ok\":true}",
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/stop.py\"",
             "timeout": 10
           }
         ]

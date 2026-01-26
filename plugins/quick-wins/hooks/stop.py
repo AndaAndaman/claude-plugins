@@ -195,13 +195,15 @@ def main():
         if analysis['should_scan']:
             # Block stop and trigger quick wins scan
             code_files = analysis['code_files']
-            file_list = ', '.join(Path(f).name for f in code_files[:3])
-            if len(code_files) > 3:
-                file_list += f' (+{len(code_files) - 3} more)'
+            # Deduplicate files
+            unique_files = list(dict.fromkeys(code_files))
+            file_list = ', '.join(Path(f).name for f in unique_files[:3])
+            if len(unique_files) > 3:
+                file_list += f' (+{len(unique_files) - 3} more)'
 
             result = {
                 'decision': 'block',
-                'reason': f'Quick wins scan recommended for: {file_list}. Run /quick-wins to review code quality improvements.'
+                'reason': f'IMPORTANT: Before stopping, you MUST use the Skill tool to invoke "quick-wins" to scan these modified files for code quality improvements: {file_list}. This is required by the quick-wins plugin.'
             }
             print(json.dumps(result))
         else:

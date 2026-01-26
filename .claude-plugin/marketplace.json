@@ -42,7 +42,7 @@
     },
     {
       "name": "quick-wins",
-      "version": "0.1.7",
+      "version": "0.1.8",
       "description": "Identifies and guides easy code improvements. Small improvements, big impact.",
       "source": "./plugins/quick-wins",
       "author": {

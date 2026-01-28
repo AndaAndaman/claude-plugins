@@ -1,5 +1,5 @@
 {
-  "description": "Quick wins hook - suggests code improvements after task completion",
+  "description": "Quick wins hook - politely suggests code quality scans at completion points",
   "hooks": {
     "Stop": [
       {

@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """
-Quick Wins Stop Hook
+Quick Wins Permission-Asking Stop Hook
 
-Analyzes the conversation transcript to determine if a quick wins
-code quality scan should be triggered after the user stops.
+Detects completion signals and politely asks permission to run a quick wins scan
+instead of forcing it. Respects user flow and autonomy.
 
 Decision Logic:
-1. Check if significant code changes were made (Write/Edit tools on code files)
-2. Skip if urgent/hotfix keywords detected
-3. Skip if user explicitly said "skip scan" or "no quick wins"
-4. Skip if only documentation changes
-5. Trigger scan for TypeScript, JavaScript, Angular, C#/.NET code changes
+1. Check exclusion criteria (urgency, mid-development, docs only, etc.) → Allow stop
+2. Check for strong completion signals (1+) → Ask permission
+3. Check for moderate completion signals (2+) → Ask permission
+4. Otherwise → Allow stop
 """
 
 import json
@@ -19,39 +18,91 @@ import re
 from pathlib import Path
 
 
-# Supported code file extensions
+# Strong completion signals (1+ triggers permission request)
+STRONG_SIGNALS = [
+    # Explicit completion
+    r'\b(done|finished|ready|complete|completed)\b',
+    r'\blooks?\s+(good|great|fine|ok|okay)\b',
+    r'\ball\s+set\b',
+    r"that'?s?\s+it\b",
+
+    # Commit intent
+    r'\bready\s+to\s+commit\b',
+    r"\blet'?s?\s+commit\b",
+    r'\bcommit\s+(this|these|changes)\b',
+
+    # Next steps queries
+    r'\bwhat\s*\'?s?\s+next\b',
+    r'\banything\s+else\b',
+    r'\bwhat\s+(should\s+)?i\s+do\s+now\b',
+    r'\bnow\s+what(\s+next)?\b',
+
+    # Testing complete
+    r'\btests?\s+(pass|passed|passing)\b',
+    r'\ball\s+(green|tests?\s+green)\b',
+    r'\btested\s+and\s+working\b',
+
+    # Deployment mentions
+    r'\bready\s+to\s+deploy\b',
+    r'\bpush\s+to\s+prod\b',
+]
+
+# Moderate signals (2+ trigger permission request)
+MODERATE_SIGNALS = [
+    r'\bfeature\s+(is\s+)?(working|complete|done)\b',
+    r'\bimplementation\s+(is\s+)?(complete|done|finished)\b',
+    r'\brefactoring\s+(is\s+)?(complete|done|finished)\b',
+    r'\bbuild\s+(passes|passed|successful)\b',
+    r'\bno\s+(errors|issues|problems)\b',
+]
+
+# Exclusion keywords (if present, always allow stop)
+EXCLUSION_SIGNALS = [
+    # Urgency
+    r'\b(urgent|critical|hotfix|emergency|asap|immediately)\b',
+    r'\bproduction\s+(down|issue|bug)\b',
+
+    # Explicit decline
+    r'\bskip\s+(scan|review|quick\s+wins)\b',
+    r'\bno\s+quick\s+wins\b',
+    r'\bdon\'?t\s+(scan|check|review)\b',
+    r'\bnot\s+now\b',
+
+    # Mid-development indicators
+    r'\bstill\s+(not\s+)?working\b',
+    r'\blet\s+me\s+try\b',
+    r'\btrying\s+to\b',
+    r'\bdebugging\b',
+]
+
+# Code file extensions
 CODE_EXTENSIONS = {
     '.ts', '.tsx', '.js', '.jsx',  # TypeScript/JavaScript
-    '.cs',                          # C#/.NET
-    '.component.ts', '.service.ts', '.module.ts',  # Angular
+    '.cs',                          # C#
+    '.component.ts', '.service.ts', '.module.ts', '.guard.ts',  # Angular
+    '.controller.cs', '.facade.cs', '.logic.cs',  # .NET patterns
 }
 
-# Documentation/config extensions to ignore
+# Documentation/config extensions
 DOC_EXTENSIONS = {
-    '.md', '.txt', '.json', '.yaml', '.yml', '.xml',
+    '.md', '.txt', '.rst',
+    '.json', '.yaml', '.yml', '.xml', '.toml', '.ini',
     '.gitignore', '.editorconfig',
 }
 
-# Keywords that indicate we should skip scanning
-SKIP_KEYWORDS = [
-    'urgent', 'critical', 'hotfix', 'production issue',
-    'skip scan', 'no quick wins', 'don\'t scan', 'skip review',
-]
-
 
 def is_code_file(file_path: str) -> bool:
-    """Check if a file path is a supported code file."""
+    """Check if a file is a code file."""
     if not file_path:
         return False
 
     path = Path(file_path)
     suffix = path.suffix.lower()
 
-    # Check direct extension match
     if suffix in CODE_EXTENSIONS:
         return True
 
-    # Check compound extensions (e.g., .component.ts)
+    # Check compound extensions
     name = path.name.lower()
     for ext in CODE_EXTENSIONS:
         if name.endswith(ext):
@@ -61,7 +112,7 @@ def is_code_file(file_path: str) -> bool:
 
 
 def is_doc_file(file_path: str) -> bool:
-    """Check if a file path is a documentation/config file."""
+    """Check if a file is a documentation/config file."""
     if not file_path:
         return False
 
@@ -70,20 +121,18 @@ def is_doc_file(file_path: str) -> bool:
     return suffix in DOC_EXTENSIONS
 
 
-def should_skip_scan(transcript_content: str) -> bool:
-    """Check if any skip keywords are present in the conversation."""
-    content_lower = transcript_content.lower()
-    for keyword in SKIP_KEYWORDS:
-        if keyword in content_lower:
-            return True
-    return False
+def check_pattern_in_text(patterns: list, text: str) -> int:
+    """Count how many patterns match in the text."""
+    text_lower = text.lower()
+    count = 0
+    for pattern in patterns:
+        if re.search(pattern, text_lower, re.IGNORECASE):
+            count += 1
+    return count
 
 
 def extract_modified_files(transcript_path: str) -> list:
-    """
-    Read the transcript and extract files modified by Write/Edit/NotebookEdit tools.
-    Returns a list of file paths that were modified.
-    """
+    """Extract files modified by Write/Edit/NotebookEdit tools."""
     modified_files = []
 
     try:
@@ -98,7 +147,6 @@ def extract_modified_files(transcript_path: str) -> list:
                 except json.JSONDecodeError:
                     continue
 
-                # Look for tool use entries
                 if entry.get('type') == 'assistant':
                     message = entry.get('message', {})
                     content = message.get('content', [])
@@ -108,41 +156,72 @@ def extract_modified_files(transcript_path: str) -> list:
                             tool_name = block.get('name', '')
                             tool_input = block.get('input', {})
 
-                            # Check for file modification tools
                             if tool_name in ('Write', 'Edit', 'NotebookEdit'):
                                 file_path = tool_input.get('file_path', '')
                                 if file_path:
                                     modified_files.append(file_path)
 
-    except Exception as e:
-        # If we can't read transcript, return empty list
+    except Exception:
         pass
 
     return modified_files
 
 
-def analyze_changes(transcript_path: str) -> dict:
+def get_recent_user_messages(transcript_path: str, limit: int = 3) -> str:
+    """Get the last N user messages from the transcript."""
+    user_messages = []
+
+    try:
+        with open(transcript_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                if entry.get('type') == 'user':
+                    message = entry.get('message', {})
+                    content = message.get('content', [])
+
+                    for block in content:
+                        if block.get('type') == 'text':
+                            text = block.get('text', '')
+                            if text:
+                                user_messages.append(text)
+
+    except Exception:
+        pass
+
+    # Return last N messages
+    return ' '.join(user_messages[-limit:]) if user_messages else ''
+
+
+def analyze_completion_signals(transcript_path: str) -> dict:
     """
-    Analyze the transcript to determine if quick wins scan should run.
-    Returns a dict with 'should_scan', 'reason', and 'code_files'.
+    Analyze the transcript to determine if we should ask permission for a scan.
+    Returns a dict with 'should_ask', 'reason', and 'code_files'.
     """
     result = {
-        'should_scan': False,
+        'should_ask': False,
         'reason': '',
         'code_files': [],
     }
 
-    # Read transcript content for skip keyword check
-    try:
-        with open(transcript_path, 'r', encoding='utf-8') as f:
-            transcript_content = f.read()
-    except Exception:
-        result['reason'] = 'Could not read transcript'
+    # Get recent user messages (last 3 messages)
+    recent_messages = get_recent_user_messages(transcript_path, limit=3)
+
+    if not recent_messages:
+        result['reason'] = 'No recent user messages'
         return result
 
-    # Check for skip keywords
-    if should_skip_scan(transcript_content):
-        result['reason'] = 'Skip keyword detected'
+    # Check for exclusion signals
+    exclusion_count = check_pattern_in_text(EXCLUSION_SIGNALS, recent_messages)
+    if exclusion_count > 0:
+        result['reason'] = 'Exclusion signal detected'
         return result
 
     # Extract modified files
@@ -161,11 +240,21 @@ def analyze_changes(transcript_path: str) -> dict:
         result['reason'] = 'Only documentation changes'
         return result
 
-    # Code files modified - trigger scan
-    if code_files:
-        result['should_scan'] = True
+    if not code_files:
+        result['reason'] = 'No code files modified'
+        return result
+
+    # Check for completion signals
+    strong_signal_count = check_pattern_in_text(STRONG_SIGNALS, recent_messages)
+    moderate_signal_count = check_pattern_in_text(MODERATE_SIGNALS, recent_messages)
+
+    # Decision logic: Strong (1+) or Moderate (2+) triggers permission request
+    if strong_signal_count >= 1 or moderate_signal_count >= 2:
+        result['should_ask'] = True
         result['code_files'] = code_files
-        result['reason'] = f'Code changes in {len(code_files)} file(s)'
+        result['reason'] = f'Completion signals detected (strong: {strong_signal_count}, moderate: {moderate_signal_count})'
+    else:
+        result['reason'] = f'Insufficient signals (strong: {strong_signal_count}, moderate: {moderate_signal_count})'
 
     return result
 
@@ -189,21 +278,25 @@ def main():
             print(json.dumps({'ok': True}))
             sys.exit(0)
 
-        # Analyze changes
-        analysis = analyze_changes(transcript_path)
+        # Analyze completion signals
+        analysis = analyze_completion_signals(transcript_path)
 
-        if analysis['should_scan']:
-            # Block stop and trigger quick wins scan
+        if analysis['should_ask']:
+            # Ask permission instead of forcing
             code_files = analysis['code_files']
-            # Deduplicate files
             unique_files = list(dict.fromkeys(code_files))
-            file_list = ', '.join(Path(f).name for f in unique_files[:3])
-            if len(unique_files) > 3:
+
+            # Format file list
+            if len(unique_files) <= 3:
+                file_list = ', '.join(Path(f).name for f in unique_files)
+            else:
+                file_list = ', '.join(Path(f).name for f in unique_files[:3])
                 file_list += f' (+{len(unique_files) - 3} more)'
 
+            # Friendly permission request
             result = {
                 'decision': 'block',
-                'reason': f'IMPORTANT: Before stopping, you MUST use the Skill tool to invoke "quick-wins" Skill(quick-wins:quick-wins) to scan these modified files for code quality improvements: {file_list}. This is required by the quick-wins plugin.'
+                'reason': f'I noticed you modified {file_list}. Would you like me to run a quick wins scan to check for easy improvements? (Say "yes" to scan, or "no"/"skip" to continue)'
             }
             print(json.dumps(result))
         else:

@@ -1,9 +1,18 @@
-#!/bin/bash
-# ask-before-code SessionStart hook
-# Loads context about proactive clarity-guardian triggering
+#!/usr/bin/env python3
+"""
+ask-before-code SessionStart hook
+Loads context about proactive clarity-guardian triggering
+"""
 
-cat <<'EOF'
-📋 **ask-before-code Plugin Active**
+import sys
+import io
+
+# Ensure UTF-8 encoding for Windows compatibility with emojis
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+def main():
+    message = """📋 **ask-before-code Plugin Active**
 
 The clarity-guardian agent helps prevent wasted development by encouraging requirement clarity.
 
@@ -22,4 +31,10 @@ The clarity-guardian agent helps prevent wasted development by encouraging requi
 🤖 **Your role:** When you detect unclear requirements, proactively suggest using the clarity-guardian agent or /clarify command to gather requirements first.
 
 💡 **Remember:** The plugin is a helper, not a blocker. If the user provides clear context or explicitly wants to proceed, that's fine. The goal is to catch unclear requirements early, not to slow down clear work.
-EOF
+"""
+
+    print(message)
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())

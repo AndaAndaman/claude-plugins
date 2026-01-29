@@ -1,9 +1,18 @@
-#!/bin/bash
-# quick-wins SessionStart hook
-# Loads context about running quick-wins scan when work is complete
+#!/usr/bin/env python3
+"""
+quick-wins SessionStart hook
+Loads context about running quick-wins scan when work is complete
+"""
 
-cat <<'EOF'
-🎯 **quick-wins Plugin Active**
+import sys
+import io
+
+# Ensure UTF-8 encoding for Windows compatibility with emojis
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+def main():
+    message = """🎯 **quick-wins Plugin Active**
 
 The quick-wins plugin helps maintain code quality through easy, high-impact improvements (1-5 minute fixes).
 
@@ -37,4 +46,10 @@ The quick-wins plugin helps maintain code quality through easy, high-impact impr
 - TypeScript/JavaScript (modern syntax, async patterns, type safety)
 - Angular (components, services, RxJS, change detection)
 - .NET/C# (async/await, LINQ, modern C# features)
-EOF
+"""
+
+    print(message)
+    return 0
+
+if __name__ == "__main__":
+    sys.exit(main())

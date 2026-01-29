@@ -32,7 +32,7 @@
   "plugins": [
     {
       "name": "ask-before-code",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "description": "Encourages clarity before coding to prevent wasted work. Ask 3 questions now, save 3 hours later.",
       "source": "./plugins/ask-before-code",
       "author": {
@@ -42,7 +42,7 @@
     },
     {
       "name": "quick-wins",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "description": "Identifies and guides easy code improvements. Small improvements, big impact.",
       "source": "./plugins/quick-wins",
       "author": {

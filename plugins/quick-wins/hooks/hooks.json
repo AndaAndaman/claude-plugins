@@ -1,6 +1,18 @@
 {
-  "description": "Quick wins hook - politely suggests code quality scans at completion points",
+  "description": "Quick wins hooks - load proactive context and suggest scans at completion points",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

@@ -1,6 +1,6 @@
 {
   "name": "ask-before-code",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Encourages clarity before coding to prevent wasted work. Ask 3 questions now, save 3 hours later.",
   "author": {
     "name": "FlowAccount Developer",

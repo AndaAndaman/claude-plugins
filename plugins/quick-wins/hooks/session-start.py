@@ -6,6 +6,7 @@ Loads context about running quick-wins scan when work is complete
 
 import sys
 import io
+import json
 
 # Ensure UTF-8 encoding for Windows compatibility with emojis
 if sys.platform == 'win32':
@@ -48,7 +49,14 @@ The quick-wins plugin helps maintain code quality through easy, high-impact impr
 - .NET/C# (async/await, LINQ, modern C# features)
 """
 
-    print(message)
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": message
+        }
+    }
+
+    print(json.dumps(output))
     return 0
 
 if __name__ == "__main__":

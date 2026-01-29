@@ -6,6 +6,7 @@ Loads context about proactive clarity-guardian triggering
 
 import sys
 import io
+import json
 
 # Ensure UTF-8 encoding for Windows compatibility with emojis
 if sys.platform == 'win32':
@@ -33,7 +34,14 @@ The clarity-guardian agent helps prevent wasted development by encouraging requi
 💡 **Remember:** The plugin is a helper, not a blocker. If the user provides clear context or explicitly wants to proceed, that's fine. The goal is to catch unclear requirements early, not to slow down clear work.
 """
 
-    print(message)
+    output = {
+        "hookSpecificOutput": {
+            "hookEventName": "SessionStart",
+            "additionalContext": message
+        }
+    }
+
+    print(json.dumps(output))
     return 0
 
 if __name__ == "__main__":

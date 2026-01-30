@@ -1,0 +1,12 @@
+{
+  "name": "local-memory",
+  "version": "0.1.0",
+  "description": "Automatically builds subdirectory CLAUDE.md files as context breadcrumbs when working through the codebase",
+  "author": {
+    "name": "FlowAccount Developer",
+    "email": "dev@flowaccount.com"
+  },
+  "homepage": "https://github.com/AndaAndaman/claude-plugins",
+  "license": "MIT",
+  "keywords": ["memory", "context", "documentation", "knowledge-base"]
+}

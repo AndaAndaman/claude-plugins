@@ -1,0 +1,7 @@
+{
+  "session_id": "test123",
+  "transcript_path": "/tmp/test-transcript.txt",
+  "cwd": "/home/user/project",
+  "permission_mode": "ask",
+  "hook_event_name": "Stop"
+}

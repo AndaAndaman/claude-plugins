@@ -1,0 +1,10 @@
+{
+  "local-memory": {
+    "type": "stdio",
+    "command": "python",
+    "args": ["$CLAUDE_PLUGIN_ROOT/server/context_builder.py"],
+    "env": {
+      "PYTHONUNBUFFERED": "1"
+    }
+  }
+}

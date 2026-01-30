@@ -1,0 +1,20 @@
+# Local settings (user-specific, not shared)
+.claude/*.local.md
+
+# Test outputs
+test-output/
+*.test.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

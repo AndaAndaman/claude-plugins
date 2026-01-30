@@ -1,0 +1,55 @@
+---
+# Threshold: Number of files that must be edited in a directory before auto-generating CLAUDE.md
+threshold: 2
+
+# Auto-generate: Enable/disable automatic context building via Stop hook
+autoGenerate: true
+
+# Max files analyzed: Maximum number of files to analyze per directory (prevents huge summaries)
+maxFilesAnalyzed: 50
+
+# Excluded directories: Additional directories to exclude beyond defaults
+# Default exclusions: node_modules, .git, .svn, .hg, dist, build, out, target
+excludedDirectories:
+  - temp
+  - cache
+  - .next
+  - coverage
+---
+
+# Local Memory Plugin Configuration
+
+This file configures the local-memory plugin behavior for this project.
+
+## Settings Explanation
+
+### threshold
+Controls how many files must be edited in the same directory before the plugin automatically generates a CLAUDE.md file. Lower values mean more CLAUDE.md files are created.
+
+**Recommended values:**
+- `2` - Default, good balance
+- `3-4` - For larger projects where you want fewer CLAUDE.md files
+- `1` - For small projects or when you want maximum documentation
+
+### autoGenerate
+Controls whether the Stop hook automatically generates CLAUDE.md files.
+
+- `true` - Automatic generation (recommended)
+- `false` - Only generate via `/build-context` command (manual control)
+
+### maxFilesAnalyzed
+Limits how many files the agent will analyze in a single directory. Prevents extremely long CLAUDE.md files in large modules.
+
+**Recommended values:**
+- `50` - Default, keeps CLAUDE.md concise
+- `100` - For comprehensive documentation
+- `25` - For very concise summaries
+
+### excludedDirectories
+Add any project-specific directories that should not get CLAUDE.md files. The plugin already excludes common directories (node_modules, dist, etc.)
+
+**Common additions:**
+- Framework-specific: `.next`, `.nuxt`, `.angular`, `__pycache__`
+- Test artifacts: `coverage`, `test-results`, `__snapshots__`
+- Temporary: `temp`, `tmp`, `cache`
+- Generated: `generated`, `auto`, `codegen`

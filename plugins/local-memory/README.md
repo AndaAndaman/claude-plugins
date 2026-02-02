@@ -310,13 +310,13 @@ echo "**/CLAUDE.md" >> .gitignore
 - Check that directory isn't in exclusion list
 - Look for hook execution in `claude --debug` output
 - Verify MCP server is running: `/mcp` should show local-memory
-- Test hook script manually: `echo '{"transcript_path":"path","cwd":"dir"}' | bash hooks/scripts/check-context-trigger.sh`
+- Test hook script manually: `echo '{"transcript_path":"path","cwd":"dir"}' | sh hooks/scripts/check-context-trigger.sh`
 
 **Hook script errors**:
-- Ensure bash is installed (required on Windows: Git Bash or WSL)
+- Ensure sh is available (should be present on all Unix-like systems and Git Bash on Windows)
 - Check script has execute permissions: `chmod +x hooks/scripts/check-context-trigger.sh`
 - Verify ${CLAUDE_PLUGIN_ROOT} is set correctly (automatic in Claude Code)
-- Test with: `bash hooks/scripts/check-context-trigger.sh < test-input.json`
+- Test with: `sh hooks/scripts/check-context-trigger.sh < test-input.json`
 
 **MCP tool call failures**:
 - Check directory path exists

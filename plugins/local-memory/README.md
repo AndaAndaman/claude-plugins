@@ -315,7 +315,7 @@ echo "**/CLAUDE.md" >> .gitignore
 **Hook script errors**:
 - Ensure bash is installed (required on Windows: Git Bash or WSL)
 - Check script has execute permissions: `chmod +x hooks/scripts/check-context-trigger.sh`
-- Verify $CLAUDE_PLUGIN_ROOT is set correctly (automatic in Claude Code)
+- Verify ${CLAUDE_PLUGIN_ROOT} is set correctly (automatic in Claude Code)
 - Test with: `bash hooks/scripts/check-context-trigger.sh < test-input.json`
 
 **MCP tool call failures**:

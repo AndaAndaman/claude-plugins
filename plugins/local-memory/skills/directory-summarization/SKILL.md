@@ -348,7 +348,7 @@ See `examples/` directory for complete CLAUDE.md samples:
 
 Use `scripts/analyze-directory.sh` for automated pattern detection:
 ```bash
-bash $CLAUDE_PLUGIN_ROOT/skills/directory-summarization/scripts/analyze-directory.sh <directory>
+bash "${CLAUDE_PLUGIN_ROOT}/skills/directory-summarization/scripts/analyze-directory.sh" <directory>
 ```
 
 Returns JSON with detected patterns, file types, and import graph.

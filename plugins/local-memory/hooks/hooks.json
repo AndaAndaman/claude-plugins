@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/check-context-trigger.sh\"",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/local-memory_stop.py\"",
             "timeout": 30000
           }
         ]

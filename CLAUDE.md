@@ -187,6 +187,10 @@ When editing plugin components:
    - Must return `{"ok": boolean, "systemMessage"?: string}`
    - PreToolUse hooks: Execute before tools (Write, Edit, Bash, etc.)
    - Stop hooks: Execute when task completes or user stops
+   - **Naming convention for hook scripts:** `{plugin-name}_{hook-type}.py`
+     - Example: `quick-wins_stop.py`, `local-memory_stop.py`
+     - Makes hook scripts immediately identifiable by parent plugin
+     - Applies to all command-based hook scripts (Python, bash, etc.)
 
 4. **Skill files** (`skills/*/SKILL.md`) - Markdown knowledge base
    - Progressive disclosure format (overview → details → examples)

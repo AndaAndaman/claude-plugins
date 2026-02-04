@@ -145,7 +145,11 @@ def main():
     try:
         # Read hook input from stdin
         input_data = json.load(sys.stdin)
-        
+
+        # Check if we're already in a stop hook loop to prevent infinite recursion
+        if input_data.get('stop_hook_active'):
+            sys.exit(0)
+
         # Get CWD and transcript path
         cwd = input_data.get('cwd', '.')
         transcript_path = input_data.get('transcript_path', '')

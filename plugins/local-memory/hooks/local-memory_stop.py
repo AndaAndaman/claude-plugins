@@ -10,11 +10,14 @@ Decision Logic:
 2. If autoGenerate is false → Allow stop
 3. Check for session completion signals (git commit, tests pass, etc.)
 4. If session not complete → Allow stop (don't interrupt active coding)
-5. Parse transcript for Edit/Write/NotebookEdit operations
-6. Group files by directory, exclude specified directories
-7. Skip directories with recently-updated CLAUDE.md (within cooldown period)
-8. If any directory has >= threshold files → Block and suggest MCP tools
-9. Otherwise → Allow stop
+5. Load session state (last processed line, already suggested directories)
+6. Parse transcript for NEW Edit/Write/NotebookEdit operations (since last run)
+7. Group files by directory, exclude specified directories
+8. Skip directories already suggested in this session
+9. Skip directories with recently-updated CLAUDE.md (within cooldown period)
+10. If any directory has >= threshold files → Block and suggest MCP tools
+11. Save session state (processed line, suggested directories)
+12. Otherwise → Allow stop
 
 Debug Mode:
 - Set debug: true in .claude/local-memory.local.md, OR
@@ -27,6 +30,7 @@ import sys
 import re
 import os
 import time
+import hashlib
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
@@ -35,6 +39,47 @@ from datetime import datetime
 # Global debug state
 DEBUG_ENABLED = False
 DEBUG_LOG_PATH = None
+
+
+def get_session_state_path(cwd: str, transcript_path: str) -> str:
+    """Get path for session state file based on transcript path."""
+    # Create a hash of the transcript path for a unique state file per session
+    transcript_hash = hashlib.md5(transcript_path.encode()).hexdigest()[:12]
+    return os.path.join(cwd, '.claude', f'local-memory-state-{transcript_hash}.json')
+
+
+def load_session_state(state_path: str) -> dict:
+    """Load session state from file."""
+    default_state = {
+        'last_processed_line': 0,
+        'suggested_directories': [],
+        'last_run_time': None
+    }
+
+    if not os.path.exists(state_path):
+        return default_state
+
+    try:
+        with open(state_path, 'r', encoding='utf-8') as f:
+            state = json.load(f)
+            # Ensure all required keys exist
+            for key, default_val in default_state.items():
+                if key not in state:
+                    state[key] = default_val
+            return state
+    except Exception:
+        return default_state
+
+
+def save_session_state(state_path: str, state: dict):
+    """Save session state to file."""
+    try:
+        os.makedirs(os.path.dirname(state_path), exist_ok=True)
+        state['last_run_time'] = datetime.now().isoformat()
+        with open(state_path, 'w', encoding='utf-8') as f:
+            json.dump(state, f, indent=2)
+    except Exception as e:
+        debug_log(f"Failed to save session state: {e}")
 
 
 def debug_log(message: str):
@@ -332,15 +377,32 @@ def is_claude_md_recent(dir_path: str, cwd: str, cooldown_minutes: int) -> bool:
         return False
 
 
-def extract_file_paths_from_transcript(transcript_path: str, cwd: str) -> list:
-    """Extract file paths from Edit/Write/NotebookEdit tool invocations."""
+def extract_file_paths_from_transcript(transcript_path: str, cwd: str, start_line: int = 0) -> tuple:
+    """
+    Extract file paths from Edit/Write/NotebookEdit tool invocations.
+
+    Args:
+        transcript_path: Path to the JSONL transcript file
+        cwd: Current working directory
+        start_line: Line number to start from (0-indexed, skips lines before this)
+
+    Returns:
+        Tuple of (file_paths: list, last_line: int)
+    """
     file_paths = []
     seen_paths = set()
     target_tools = {'Edit', 'Write', 'NotebookEdit'}
+    last_line = start_line
 
     try:
         with open(transcript_path, 'r', encoding='utf-8') as f:
-            for line in f:
+            for line_num, line in enumerate(f):
+                # Skip lines we've already processed
+                if line_num < start_line:
+                    continue
+
+                last_line = line_num + 1  # Track progress (1-indexed for next run)
+
                 line = line.strip()
                 if not line:
                     continue
@@ -404,7 +466,7 @@ def extract_file_paths_from_transcript(transcript_path: str, cwd: str) -> list:
     except Exception:
         pass
 
-    return file_paths
+    return file_paths, last_line
 
 
 def group_files_by_directory(file_paths: list, cwd: str, excluded_dirs: list) -> dict:
@@ -456,6 +518,11 @@ def main():
             debug_log("EXIT: autoGenerate=False (disabled)")
             sys.exit(0)
 
+        # Load session state for incremental processing
+        state_path = get_session_state_path(cwd, transcript_path)
+        session_state = load_session_state(state_path)
+        debug_log(f"Session state: last_line={session_state['last_processed_line']}, already_suggested={session_state['suggested_directories']}")
+
         # Check if session appears complete
         completion = check_session_completion(transcript_path)
         debug_log(f"Completion check: is_complete={completion['is_complete']}, reason='{completion['reason']}'")
@@ -468,12 +535,17 @@ def main():
             debug_log(f"EXIT: Session not complete - {completion['reason']}")
             sys.exit(0)
 
-        # Extract file paths
-        file_paths = extract_file_paths_from_transcript(transcript_path, cwd)
-        debug_log(f"Extracted {len(file_paths)} file paths from transcript")
+        # Extract file paths (only from new transcript entries)
+        file_paths, last_line = extract_file_paths_from_transcript(
+            transcript_path, cwd, session_state['last_processed_line']
+        )
+        debug_log(f"Extracted {len(file_paths)} file paths from transcript (lines {session_state['last_processed_line']}-{last_line})")
 
         if not file_paths:
-            debug_log("EXIT: No Edit/Write/NotebookEdit operations found")
+            debug_log("EXIT: No NEW Edit/Write/NotebookEdit operations found")
+            # Still update the processed line to avoid re-scanning
+            session_state['last_processed_line'] = last_line
+            save_session_state(state_path, session_state)
             sys.exit(0)
 
         # Group by directory
@@ -484,14 +556,21 @@ def main():
         )
         debug_log(f"Directories with edits: {dict(dir_counts)}")
 
-        # Find directories meeting threshold, excluding recently-updated ones
+        # Find directories meeting threshold, excluding recently-updated or already-suggested ones
         candidate_dirs = []
         skipped_dirs = []
+        skipped_already_suggested = []
         below_threshold_dirs = []
 
         for dir_path, count in dir_counts.items():
             if count < settings['threshold']:
                 below_threshold_dirs.append((dir_path, count))
+                continue
+
+            # Skip directories already suggested in this session
+            if dir_path in session_state['suggested_directories']:
+                skipped_already_suggested.append(dir_path)
+                debug_log(f"  SKIP (already suggested): {dir_path}")
                 continue
 
             if is_claude_md_recent(dir_path, cwd, settings['cooldownMinutes']):
@@ -505,8 +584,12 @@ def main():
         if below_threshold_dirs:
             debug_log(f"Below threshold (need {settings['threshold']}): {below_threshold_dirs}")
 
+        # Update session state - track processed lines even if no candidates
+        session_state['last_processed_line'] = last_line
+
         if not candidate_dirs:
-            debug_log("EXIT: No candidate directories (all below threshold or in cooldown)")
+            debug_log("EXIT: No candidate directories (all below threshold, cooldown, or already suggested)")
+            save_session_state(state_path, session_state)
             sys.exit(0)
 
         # Build output
@@ -515,6 +598,10 @@ def main():
         summary = ", ".join(summary_parts)
 
         debug_log(f"TRIGGER: Blocking stop with {len(candidate_dirs)} directories")
+
+        # Update session state with newly suggested directories
+        session_state['suggested_directories'].extend(dirs_list)
+        save_session_state(state_path, session_state)
 
         reason = f"""Session complete ({completion['reason']}). Detected file changes in {summary}.
 
@@ -526,8 +613,13 @@ Use local-memory MCP tools to build context:
 
 This creates CLAUDE.md files documenting modules you worked on."""
 
+        skip_notes = []
         if skipped_dirs:
-            reason += f"\n\n(Skipped {len(skipped_dirs)} directories with recent CLAUDE.md updates)"
+            skip_notes.append(f"{len(skipped_dirs)} directories with recent CLAUDE.md updates")
+        if skipped_already_suggested:
+            skip_notes.append(f"{len(skipped_already_suggested)} directories already suggested this session")
+        if skip_notes:
+            reason += f"\n\n(Skipped: {', '.join(skip_notes)})"
 
         result = {
             'decision': 'block',

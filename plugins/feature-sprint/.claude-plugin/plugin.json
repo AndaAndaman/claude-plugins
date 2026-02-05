@@ -1,0 +1,12 @@
+{
+  "name": "feature-sprint",
+  "version": "0.1.0",
+  "description": "One iteration MVP development with parallel analysis perspectives. Scout finds location, Guard spots risks, Tester defines verification.",
+  "author": {
+    "name": "FlowAccount Developer",
+    "email": "dev@flowaccount.com"
+  },
+  "homepage": "https://github.com/AndaAndaman/claude-plugins",
+  "license": "MIT",
+  "keywords": ["feature", "mvp", "sprint", "parallel-agents", "development", "implementation"]
+}

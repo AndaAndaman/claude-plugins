@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "A curated plugin marketplace for Claude Code containing development tools and productivity plugins specifically designed for FlowAccount developers.",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "repository": {
     "type": "git",
@@ -70,6 +70,16 @@
       "version": "0.2.2",
       "description": "Automatically builds subdirectory CLAUDE.md context breadcrumbs using hybrid Hook + MCP architecture. Preserves module knowledge between sessions.",
       "source": "./plugins/local-memory",
+      "author": {
+        "name": "FlowAccount Developer",
+        "email": "dev@flowaccount.com"
+      }
+    },
+    {
+      "name": "feature-sprint",
+      "version": "0.1.0",
+      "description": "One iteration MVP development with parallel analysis. Scout finds location, Guard spots risks, Tester defines verification. Inspired by multi-agent dev teams.",
+      "source": "./plugins/feature-sprint",
       "author": {
         "name": "FlowAccount Developer",
         "email": "dev@flowaccount.com"

@@ -298,24 +298,37 @@ def is_claude_md_recent(dir_path: str, cwd: str, cooldown_minutes: int) -> bool:
     Check if CLAUDE.md in directory was updated within cooldown period.
     Returns True if should skip (recently updated), False otherwise.
     """
+    # Normalize path separators for cross-platform compatibility
+    dir_path = os.path.normpath(dir_path)
+    cwd = os.path.normpath(cwd)
+
     # Build absolute path
     if not os.path.isabs(dir_path):
         full_dir = os.path.join(cwd, dir_path)
     else:
         full_dir = dir_path
 
+    # Normalize again after join to ensure consistent separators
+    full_dir = os.path.normpath(full_dir)
     claude_md_path = os.path.join(full_dir, 'CLAUDE.md')
 
+    debug_log(f"  Cooldown check: {claude_md_path}")
+
     if not os.path.exists(claude_md_path):
+        debug_log(f"    -> No CLAUDE.md found")
         return False  # No CLAUDE.md, don't skip
 
     try:
         mtime = os.path.getmtime(claude_md_path)
         age_minutes = (time.time() - mtime) / 60
 
-        return age_minutes < cooldown_minutes
+        is_recent = age_minutes < cooldown_minutes
+        debug_log(f"    -> Age: {age_minutes:.1f}min, cooldown: {cooldown_minutes}min, skip: {is_recent}")
 
-    except Exception:
+        return is_recent
+
+    except Exception as e:
+        debug_log(f"    -> Error checking mtime: {e}")
         return False
 
 
@@ -399,6 +412,8 @@ def group_files_by_directory(file_paths: list, cwd: str, excluded_dirs: list) ->
     dir_counts = defaultdict(int)
 
     for file_path in file_paths:
+        # Normalize path to use OS-native separators
+        file_path = os.path.normpath(file_path)
         dir_path = str(Path(file_path).parent)
 
         skip = False

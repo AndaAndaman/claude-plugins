@@ -67,7 +67,7 @@
     },
     {
       "name": "local-memory",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "description": "Automatically builds subdirectory CLAUDE.md context breadcrumbs using hybrid Hook + MCP architecture. Preserves module knowledge between sessions.",
       "source": "./plugins/local-memory",
       "author": {

@@ -15,6 +15,11 @@ Decision Logic:
 7. Skip directories with recently-updated CLAUDE.md (within cooldown period)
 8. If any directory has >= threshold files → Block and suggest MCP tools
 9. Otherwise → Allow stop
+
+Debug Mode:
+- Set debug: true in .claude/local-memory.local.md, OR
+- Set environment variable LOCAL_MEMORY_DEBUG=1
+- Logs written to .claude/local-memory-debug.log
 """
 
 import json
@@ -27,11 +32,50 @@ from collections import defaultdict
 from datetime import datetime
 
 
+# Global debug state
+DEBUG_ENABLED = False
+DEBUG_LOG_PATH = None
+
+
+def debug_log(message: str):
+    """Write debug message to log file if debug mode is enabled."""
+    if not DEBUG_ENABLED or not DEBUG_LOG_PATH:
+        return
+    try:
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        with open(DEBUG_LOG_PATH, 'a', encoding='utf-8') as f:
+            f.write(f"[{timestamp}] {message}\n")
+    except Exception:
+        pass
+
+
+def init_debug(cwd: str, settings: dict):
+    """Initialize debug mode based on settings or environment."""
+    global DEBUG_ENABLED, DEBUG_LOG_PATH
+
+    # Check environment variable
+    if os.environ.get('LOCAL_MEMORY_DEBUG', '').lower() in ('1', 'true', 'yes'):
+        DEBUG_ENABLED = True
+
+    # Check settings
+    if settings.get('debug', False):
+        DEBUG_ENABLED = True
+
+    if DEBUG_ENABLED:
+        DEBUG_LOG_PATH = os.path.join(cwd, '.claude', 'local-memory-debug.log')
+        # Ensure .claude directory exists
+        os.makedirs(os.path.dirname(DEBUG_LOG_PATH), exist_ok=True)
+        debug_log("=" * 60)
+        debug_log("Stop hook triggered")
+        debug_log(f"CWD: {cwd}")
+
+
 # Default settings
 DEFAULT_THRESHOLD = 2
 DEFAULT_AUTO_GENERATE = True
 DEFAULT_MAX_FILES = 50
 DEFAULT_COOLDOWN_MINUTES = 30  # Skip if CLAUDE.md updated within this time
+DEFAULT_DEBUG = False
 DEFAULT_EXCLUDED_DIRS = [
     "node_modules", "vendor", "packages",
     ".git", ".svn", ".hg", ".bzr",
@@ -87,6 +131,7 @@ def load_settings(cwd: str) -> dict:
         'autoGenerate': DEFAULT_AUTO_GENERATE,
         'maxFilesAnalyzed': DEFAULT_MAX_FILES,
         'cooldownMinutes': DEFAULT_COOLDOWN_MINUTES,
+        'debug': DEFAULT_DEBUG,
         'excludedDirectories': DEFAULT_EXCLUDED_DIRS.copy()
     }
 
@@ -125,6 +170,11 @@ def load_settings(cwd: str) -> dict:
         cooldown_match = re.search(r'cooldownMinutes:\s*(\d+)', frontmatter)
         if cooldown_match:
             settings['cooldownMinutes'] = int(cooldown_match.group(1))
+
+        # Extract debug
+        debug_match = re.search(r'debug:\s*(true|false)', frontmatter, re.IGNORECASE)
+        if debug_match:
+            settings['debug'] = debug_match.group(1).lower() == 'true'
 
         # Extract excludedDirectories
         excluded_match = re.search(r'excludedDirectories:\s*\n((?:\s+-\s+.+\n?)+)', frontmatter)
@@ -370,31 +420,45 @@ def main():
 
         # Infinite loop guard
         if input_data.get('stop_hook_active'):
+            debug_log("EXIT: stop_hook_active=True (infinite loop guard)")
             sys.exit(0)
 
         cwd = input_data.get('cwd', '.')
         transcript_path = input_data.get('transcript_path', '')
 
         if not transcript_path:
+            debug_log("EXIT: No transcript_path provided")
             sys.exit(0)
 
         # Load settings
         settings = load_settings(cwd)
 
+        # Initialize debug mode
+        init_debug(cwd, settings)
+        debug_log(f"Settings: threshold={settings['threshold']}, autoGenerate={settings['autoGenerate']}, cooldown={settings['cooldownMinutes']}min")
+
         if not settings['autoGenerate']:
+            debug_log("EXIT: autoGenerate=False (disabled)")
             sys.exit(0)
 
         # Check if session appears complete
         completion = check_session_completion(transcript_path)
+        debug_log(f"Completion check: is_complete={completion['is_complete']}, reason='{completion['reason']}'")
+        debug_log(f"  - has_commit={completion['has_commit']}, has_test_success={completion['has_test_success']}")
+        debug_log(f"  - has_build_success={completion['has_build_success']}, has_task_complete={completion['has_task_complete']}")
+        debug_log(f"  - has_completion_phrase={completion['has_completion_phrase']}")
+        debug_log(f"  - last_edit_index={completion['last_edit_index']}, total_entries={completion['total_entries']}")
 
         if not completion['is_complete']:
-            # Session still active, don't interrupt
+            debug_log(f"EXIT: Session not complete - {completion['reason']}")
             sys.exit(0)
 
         # Extract file paths
         file_paths = extract_file_paths_from_transcript(transcript_path, cwd)
+        debug_log(f"Extracted {len(file_paths)} file paths from transcript")
 
         if not file_paths:
+            debug_log("EXIT: No Edit/Write/NotebookEdit operations found")
             sys.exit(0)
 
         # Group by directory
@@ -403,29 +467,39 @@ def main():
             cwd,
             settings['excludedDirectories']
         )
+        debug_log(f"Directories with edits: {dict(dir_counts)}")
 
         # Find directories meeting threshold, excluding recently-updated ones
         candidate_dirs = []
         skipped_dirs = []
+        below_threshold_dirs = []
 
         for dir_path, count in dir_counts.items():
             if count < settings['threshold']:
+                below_threshold_dirs.append((dir_path, count))
                 continue
 
             if is_claude_md_recent(dir_path, cwd, settings['cooldownMinutes']):
                 skipped_dirs.append(dir_path)
+                debug_log(f"  SKIP (cooldown): {dir_path} - CLAUDE.md recently updated")
                 continue
 
             candidate_dirs.append((dir_path, count))
+            debug_log(f"  CANDIDATE: {dir_path} ({count} files)")
+
+        if below_threshold_dirs:
+            debug_log(f"Below threshold (need {settings['threshold']}): {below_threshold_dirs}")
 
         if not candidate_dirs:
-            # All directories either below threshold or recently updated
+            debug_log("EXIT: No candidate directories (all below threshold or in cooldown)")
             sys.exit(0)
 
         # Build output
         dirs_list = [dir_path for dir_path, _ in candidate_dirs]
         summary_parts = [f"{dir_path} ({count} files)" for dir_path, count in candidate_dirs]
         summary = ", ".join(summary_parts)
+
+        debug_log(f"TRIGGER: Blocking stop with {len(candidate_dirs)} directories")
 
         reason = f"""Session complete ({completion['reason']}). Detected file changes in {summary}.
 
@@ -447,7 +521,8 @@ This creates CLAUDE.md files documenting modules you worked on."""
         print(json.dumps(result))
         sys.exit(0)
 
-    except Exception:
+    except Exception as e:
+        debug_log(f"EXIT: Exception - {e}")
         sys.exit(0)
 
 

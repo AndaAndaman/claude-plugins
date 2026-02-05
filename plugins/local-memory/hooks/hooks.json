@@ -1,6 +1,18 @@
 {
   "description": "Automatically builds subdirectory CLAUDE.md files when 2+ files in same directory are modified",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/local-memory_session_start.py\"",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

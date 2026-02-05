@@ -94,28 +94,85 @@ def load_settings(cwd: str) -> dict:
 
     return settings
 def extract_file_paths_from_transcript(transcript_path: str, cwd: str) -> list:
-    """Extract file paths from Edit/Write/NotebookEdit tool invocations."""
+    """Extract file paths from Edit/Write/NotebookEdit tool invocations.
+
+    Transcripts are JSONL format with structure:
+    {"data":{"message":{"message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"..."}}]}}}}
+    """
     file_paths = []
-    
+    seen_paths = set()  # Deduplicate file paths
+    target_tools = {'Edit', 'Write', 'NotebookEdit'}
+
     try:
         with open(transcript_path, 'r', encoding='utf-8') as f:
             for line in f:
-                if '<parameter name="file_path">' in line:
-                    # Extract with proper closing tag
-                    pattern = r'<parameter name="file_path">(.*?)<.antml:parameter>'
-                    match = re.search(pattern, line)
-                    if match:
-                        file_path = match.group(1)
-                        
-                        # Convert to relative path from CWD if needed
-                        if file_path.startswith(cwd):
-                            file_path = file_path[len(cwd):].lstrip(r'\/')
-                        
+                line = line.strip()
+                if not line:
+                    continue
+
+                try:
+                    entry = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                # Navigate to content array - handle different transcript structures
+                content = None
+
+                # Structure 1: data.message.message.content (most common)
+                if 'data' in entry:
+                    data = entry['data']
+                    if 'message' in data:
+                        msg = data['message']
+                        if isinstance(msg, dict) and 'message' in msg:
+                            inner_msg = msg['message']
+                            if isinstance(inner_msg, dict) and 'content' in inner_msg:
+                                content = inner_msg['content']
+
+                # Structure 2: message.content (direct)
+                if content is None and 'message' in entry:
+                    msg = entry['message']
+                    if isinstance(msg, dict) and 'content' in msg:
+                        content = msg['content']
+
+                if not content or not isinstance(content, list):
+                    continue
+
+                # Extract file_path from tool_use entries
+                for item in content:
+                    if not isinstance(item, dict):
+                        continue
+
+                    if item.get('type') != 'tool_use':
+                        continue
+
+                    tool_name = item.get('name', '')
+                    if tool_name not in target_tools:
+                        continue
+
+                    tool_input = item.get('input', {})
+                    if not isinstance(tool_input, dict):
+                        continue
+
+                    file_path = tool_input.get('file_path', '')
+                    if not file_path:
+                        continue
+
+                    # Normalize path separators
+                    file_path = file_path.replace('\\', '/')
+                    normalized_cwd = cwd.replace('\\', '/')
+
+                    # Convert to relative path from CWD if needed
+                    if file_path.startswith(normalized_cwd):
+                        file_path = file_path[len(normalized_cwd):].lstrip('/')
+
+                    # Deduplicate
+                    if file_path not in seen_paths:
+                        seen_paths.add(file_path)
                         file_paths.append(file_path)
-    
+
     except Exception:
         pass
-    
+
     return file_paths
 
 

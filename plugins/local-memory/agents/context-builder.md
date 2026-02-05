@@ -45,6 +45,10 @@ tools:
   - Bash
   - Glob
   - Grep
+  - mcp__plugin_local-memory_local-memory__analyze_directory
+  - mcp__plugin_local-memory_local-memory__generate_context
+  - mcp__plugin_local-memory_local-memory__write_context
+  - mcp__plugin_local-memory_local-memory__list_context_files
 ---
 
 # Context Builder Agent

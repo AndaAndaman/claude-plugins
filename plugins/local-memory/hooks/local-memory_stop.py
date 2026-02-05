@@ -41,12 +41,34 @@ DEFAULT_EXCLUDED_DIRS = [
     "temp", "tmp", "cache"
 ]
 
-# Completion signal patterns
+# Completion signal patterns (detected in transcript)
 COMPLETION_SIGNALS = [
     # Git operations indicate work is done
     r'"name":\s*"Bash".*"command":\s*"[^"]*git\s+(commit|push)',
+
+    # Test success patterns (0 errors/failures in output)
+    r'(\d+)\s+pass(ed|ing)?,?\s+0\s+fail',           # "5 passed, 0 failed"
+    r'Tests:\s+\d+\s+passed,\s+0\s+failed',          # Jest: "Tests: 5 passed, 0 failed"
+    r'0\s+failing',                                   # Mocha: "0 failing"
+    r'passed.*0\s+errors?',                          # Generic: "passed, 0 errors"
+    r'All\s+\d+\s+tests?\s+passed',                  # "All 5 tests passed"
+    r'OK\s+\(\d+\s+tests?\)',                        # pytest: "OK (5 tests)"
+    r'Passed!.*Failed[:\s]+0',                        # dotnet: "Passed! - Failed: 0"
+    r'Failed[:\s]+0',                                 # Generic: "Failed: 0"
+
+    # Build success patterns (0 errors in output)
+    r'Build\s+succeeded',                            # dotnet/MSBuild
+    r'0\s+Error\(s\)',                               # MSBuild: "0 Error(s)"
+    r'Successfully\s+compiled',                      # Generic
+    r'Compiled\s+successfully',                      # TypeScript/Webpack
+    r'Build\s+complete.*0\s+errors?',                # Generic
+    r'nx\s+run.*succeeded',                          # Nx: "nx run project:build succeeded"
+
+    # Task completion
+    r'"name":\s*"TaskUpdate".*"status":\s*"completed"',
+
     # Explicit completion phrases in assistant messages
-    r'"role":\s*"assistant".*"text":\s*"[^"]*\b(committed|pushed|done|complete|finished|ready to commit)\b',
+    r'"role":\s*"assistant".*\b(committed|pushed|done|complete|finished|ready to commit|looks good|that.s all|tests pass|build succeeded)\b',
 ]
 
 # Active coding signals (should NOT trigger during these)
@@ -134,8 +156,17 @@ def check_session_completion(transcript_path: str) -> dict:
         'last_edit_index': -1,
         'total_entries': 0,
         'has_commit': False,
+        'has_test_success': False,
+        'has_build_success': False,
+        'has_task_complete': False,
         'has_completion_phrase': False
     }
+
+    # Signal categories for better reason reporting
+    git_patterns = [r'git\s+(commit|push)']
+    test_patterns = [r'pass(ed|ing)?.*0\s+fail', r'0\s+failing', r'All\s+\d+\s+tests?\s+passed', r'OK\s+\(\d+', r'Passed!.*Failed[:\s]+0', r'Failed[:\s]+0']
+    build_patterns = [r'Build\s+succeeded', r'0\s+Error\(s\)', r'Successfully\s+compiled', r'Compiled\s+successfully', r'nx\s+run.*succeeded']
+    task_patterns = [r'TaskUpdate.*completed']
 
     try:
         with open(transcript_path, 'r', encoding='utf-8') as f:
@@ -145,12 +176,27 @@ def check_session_completion(transcript_path: str) -> dict:
 
         # Scan transcript for signals
         for i, line in enumerate(lines):
-            # Check for completion signals
+            # Check for completion signals by category
+            for pattern in git_patterns:
+                if re.search(pattern, line, re.IGNORECASE):
+                    result['has_commit'] = True
+
+            for pattern in test_patterns:
+                if re.search(pattern, line, re.IGNORECASE):
+                    result['has_test_success'] = True
+
+            for pattern in build_patterns:
+                if re.search(pattern, line, re.IGNORECASE):
+                    result['has_build_success'] = True
+
+            for pattern in task_patterns:
+                if re.search(pattern, line, re.IGNORECASE):
+                    result['has_task_complete'] = True
+
+            # Check all COMPLETION_SIGNALS for general completion phrases
             for pattern in COMPLETION_SIGNALS:
                 if re.search(pattern, line, re.IGNORECASE):
-                    if 'git' in pattern:
-                        result['has_commit'] = True
-                    else:
+                    if 'role.*assistant' in pattern:
                         result['has_completion_phrase'] = True
 
             # Track last Edit/Write operation
@@ -163,11 +209,23 @@ def check_session_completion(transcript_path: str) -> dict:
 
         # Session is complete if:
         # 1. Has git commit/push, OR
-        # 2. Has completion phrase AND no edits in last 5 entries, OR
-        # 3. No edits in last 10 entries (long conversation gap)
+        # 2. Has test success (0 failures) AND no edits in last 5 entries, OR
+        # 3. Has build success (0 errors) AND no edits in last 5 entries, OR
+        # 4. Has task marked complete AND no edits in last 5 entries, OR
+        # 5. Has completion phrase AND no edits in last 5 entries, OR
+        # 6. No edits in last 15 entries (long conversation gap)
         if result['has_commit']:
             result['is_complete'] = True
             result['reason'] = 'Git commit/push detected'
+        elif result['has_test_success'] and entries_since_last_edit > 5:
+            result['is_complete'] = True
+            result['reason'] = 'Tests passed (0 failures) with no recent edits'
+        elif result['has_build_success'] and entries_since_last_edit > 5:
+            result['is_complete'] = True
+            result['reason'] = 'Build succeeded (0 errors) with no recent edits'
+        elif result['has_task_complete'] and entries_since_last_edit > 5:
+            result['is_complete'] = True
+            result['reason'] = 'Task marked complete with no recent edits'
         elif result['has_completion_phrase'] and entries_since_last_edit > 5:
             result['is_complete'] = True
             result['reason'] = 'Completion phrase detected with no recent edits'

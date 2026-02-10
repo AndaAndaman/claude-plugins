@@ -605,13 +605,15 @@ def main():
 
         reason = f"""Session complete ({completion['reason']}). Detected file changes in {summary}.
 
-Use local-memory MCP tools to build context:
-1. For each directory in {json.dumps(dirs_list)}:
-   - Call: mcp__plugin_local-memory_local-memory__analyze_directory({{"directory": "<dir>", "project_root": "{cwd}"}})
-   - Call: mcp__plugin_local-memory_local-memory__generate_context({{"directory": "<dir>", "project_root": "{cwd}"}})
-   - Call: mcp__plugin_local-memory_local-memory__write_context({{"directory": "<dir>", "content": "<generated>"}})
+Use the Task tool to spawn the local-memory:context-builder agent to build CLAUDE.md context files:
 
-This creates CLAUDE.md files documenting modules you worked on."""
+Task(
+  subagent_type="local-memory:context-builder",
+  description="Build CLAUDE.md context",
+  prompt="Build CLAUDE.md context files for the following directories: {json.dumps(dirs_list)}. Project root: {cwd}. Use the local-memory MCP tools (analyze_directory, generate_context, write_context) for each directory."
+)
+
+The context-builder agent has access to all local-memory MCP tools and will orchestrate the workflow automatically."""
 
         skip_notes = []
         if skipped_dirs:

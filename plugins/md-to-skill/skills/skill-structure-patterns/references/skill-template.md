@@ -6,9 +6,8 @@ This template provides a fill-in-the-blank structure for creating effective Clau
 
 ```markdown
 ---
-name: [Descriptive Skill Name in Title Case]
+name: [kebab-case-skill-name]
 description: This skill should be used when the user asks to "[specific phrase 1]", "[specific phrase 2]", "[specific phrase 3]", or mentions [key concept]. [Brief 1-2 sentence explanation of what skill provides].
-version: 0.1.0
 ---
 
 # [Skill Name]
@@ -118,17 +117,17 @@ Helper scripts in `scripts/`:
 
 ### Name Field
 
-**Format:** Title Case, descriptive, 2-5 words
+**Format:** kebab-case, lowercase letters/numbers/hyphens only, max 64 characters. If omitted, uses the directory name.
 
 **Good examples:**
-- `API Integration Patterns`
-- `Database Migration Tools`
-- `Frontend Component Guide`
+- `api-integration-patterns`
+- `database-migration-tools`
+- `frontend-component-guide`
 
 **Bad examples:**
-- `api-integration-patterns` (not Title Case)
-- `Stuff` (not descriptive)
-- `The Complete Comprehensive Guide to API Integration Patterns and Best Practices` (too long)
+- `API Integration Patterns` (not kebab-case, has spaces and uppercase)
+- `x` (not descriptive)
+- `the-complete-comprehensive-guide-to-api-integration-patterns-and-best-practices` (too long, exceeds 64 chars)
 
 ### Description Field
 
@@ -148,15 +147,28 @@ This skill should be used when the user asks to "[action 1]", "[action 2]", "[ac
 description: This skill should be used when the user asks to "create a hook", "add a PreToolUse hook", "validate tool use", "implement prompt-based hooks", or mentions hook events (PreToolUse, PostToolUse, Stop). Provides comprehensive Claude Code hooks API guidance including event types, matchers, and response schemas.
 ```
 
-### Version Field
+### Optional Fields
 
-**Format:** Semantic versioning (MAJOR.MINOR.PATCH)
+Beyond `name` and `description`, these optional fields control skill behavior:
 
-**Starting version:** `0.1.0`
-**Stable release:** `1.0.0`
-**Bug fixes:** Increment PATCH (1.0.1)
-**New features:** Increment MINOR (1.1.0)
-**Breaking changes:** Increment MAJOR (2.0.0)
+| Field | Purpose | Example |
+|---|---|---|
+| `disable-model-invocation` | Only user can invoke via `/name` | `true` |
+| `user-invocable` | Only Claude can invoke (hide from `/` menu) | `false` |
+| `allowed-tools` | Tools allowed without permission prompts | `Read, Grep, Glob` |
+| `model` | Model override | `sonnet` |
+| `context` | Run in isolated subagent | `fork` |
+| `agent` | Subagent type (with `context: fork`) | `Explore` |
+| `argument-hint` | Autocomplete hint | `[issue-number]` |
+| `hooks` | Lifecycle hooks scoped to skill | *(see hooks docs)* |
+
+**String substitutions** available in content:
+- `$ARGUMENTS` - All arguments passed when invoking
+- `$ARGUMENTS[N]` or `$N` - Specific argument by 0-based index
+- `${CLAUDE_SESSION_ID}` - Current session ID
+
+**Dynamic context** via shell preprocessing:
+- `` !`shell command` `` - Runs before content sent to Claude, output replaces placeholder
 
 ## Body Structure Guidelines
 
@@ -247,9 +259,9 @@ description: This skill should be used when the user asks to "create a hook", "a
 ## Content Length Guidelines
 
 **SKILL.md body:**
-- Target: 1,500-2,000 words
-- Maximum: 3,000 words
-- Beyond 3,000: Move content to references/
+- Keep under 500 lines for optimal performance
+- Beyond 500 lines: Move content to references/
+- Description field: max 1024 characters
 
 **Each reference file:**
 - Typical: 800-2,500 words
@@ -298,9 +310,8 @@ Ask: "Is this essential for someone starting to use this skill?"
 
 ```markdown
 ---
-name: Simple Helper
+name: simple-helper
 description: This skill should be used when the user asks to "do simple task", "perform basic operation". Provides guidance for simple operations.
-version: 0.1.0
 ---
 
 # Simple Helper
@@ -332,9 +343,8 @@ Simple operations require preparation, execution, and validation. Follow the thr
 
 ```markdown
 ---
-name: Standard Skill Template
+name: standard-skill-template
 description: This skill should be used when the user asks to "perform standard task", "work with standard workflow", "follow standard process". Provides comprehensive guidance with references.
-version: 0.1.0
 ---
 
 # Standard Skill Template
@@ -411,11 +421,12 @@ Working examples:
 Before finalizing SKILL.md:
 
 **Frontmatter:**
-- [ ] `name` field present and Title Case
+- [ ] `name` field is kebab-case (lowercase, hyphens, max 64 chars)
 - [ ] `description` starts with "This skill should be used when..."
 - [ ] `description` includes 3-7 specific trigger phrases in quotes
 - [ ] `description` mentions key concepts
-- [ ] `version` follows semantic versioning
+- [ ] `description` under 1024 characters
+- [ ] No invalid fields used (e.g., `version` is not a valid field)
 
 **Structure:**
 - [ ] Has "Purpose" section (2-4 sentences)
@@ -431,8 +442,8 @@ Before finalizing SKILL.md:
 - [ ] Objective and instructional
 
 **Length:**
-- [ ] Body is 1,500-2,000 words (or has good reason to exceed)
-- [ ] If > 3,000 words, detailed content moved to references/
+- [ ] Body is under 500 lines
+- [ ] If exceeds 500 lines, detailed content moved to references/
 
 **Quality:**
 - [ ] Clear and concise

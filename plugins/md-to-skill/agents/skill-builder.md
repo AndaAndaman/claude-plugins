@@ -51,10 +51,44 @@ Transform unstructured markdown content (from LLM exports, documentation, or man
 - Code examples properly organized
 - Quality-validated content
 - Intelligent merging with existing skills
+- Support bulk mode for efficient batch processing
+
+## Bulk Context (Optional)
+
+This agent can be invoked with bulk context from the /learn-skill command when `--bulk` flag is used. When bulk context is provided, the agent modifies its behavior to use smart defaults instead of prompting for every decision.
+
+**Bulk context structure:**
+```javascript
+{
+  bulkMode: true,                    // Boolean: true if in bulk mode
+  defaultScope: "user",               // String: "user" or "project"
+  autoAcceptName: true,               // Boolean: if true, use recommended name
+  conflictHandling: "auto-merge",     // String: "auto-merge", "ask", or "skip"
+  deferCleanup: true,                 // Boolean: if true, skip cleanup question
+  currentFile: 3,                     // Number: current file being processed
+  totalFiles: 5                       // Number: total files in batch
+}
+```
+
+**When bulk context is present:**
+- Log batch progress: "Processing file 3 of 5..."
+- Use bulk configuration instead of asking user questions (where applicable)
+- Still validate quality and handle errors normally
+- Return results to command for batch summary
 
 ## Workflow
 
 Execute these steps in order for each markdown file conversion:
+
+### Phase 0: Initialize (Bulk Mode Check)
+
+**IF bulk context is provided:**
+- Log batch progress: "Processing file {currentFile} of {totalFiles}..."
+- Note bulk configuration in effect
+- Prepare to use smart defaults
+
+**ELSE (normal mode):**
+- Proceed with standard interactive workflow
 
 ### Phase 1: Parse and Analyze Markdown
 
@@ -91,7 +125,14 @@ Execute these steps in order for each markdown file conversion:
 - Keep 2-4 words
 - Make descriptive and specific
 
-**Step 2.3: Present 3 options to user**
+**Step 2.3: Select skill name (bulk-aware)**
+
+**IF bulk context exists AND autoAcceptName is true:**
+- Use first (recommended) option automatically
+- Log decision: "Auto-selected: {name} (recommended)"
+- Skip to Phase 3
+
+**ELSE (normal mode or bulk with manual name selection):**
 
 Use AskUserQuestion:
 ```
@@ -117,11 +158,18 @@ Use AskUserQuestion:
 }
 ```
 
-**Output:** User-selected skill name
+**Output:** User-selected or auto-selected skill name
 
 ### Phase 3: Determine Scope and Check for Conflicts
 
-**Step 3.1: Ask user for scope**
+**Step 3.1: Determine scope (bulk-aware)**
+
+**IF bulk context exists AND defaultScope is set:**
+- Use defaultScope automatically ("user" or "project")
+- Log decision: "Using batch scope: {defaultScope}"
+- Skip to Step 3.2
+
+**ELSE (normal mode):**
 
 Use AskUserQuestion:
 ```
@@ -173,9 +221,22 @@ If not exists:
 - Detect new code blocks for examples/
 - Find new topics for references/
 
-**Step 4.2: Show merge preview**
+**Step 4.2: Show merge preview (if needed)**
 
-Output to user:
+**IF bulk context exists AND conflictHandling is "skip":**
+- Log decision: "Skipping {skill-name} - conflict detected (bulk mode: skip)"
+- Mark file as skipped
+- Return skipped status to command
+- Exit workflow
+
+**IF bulk context exists AND conflictHandling is "auto-merge":**
+- Log decision: "Auto-merging with existing skill (bulk mode)"
+- Skip merge preview and approval
+- Proceed directly to Step 4.4
+
+**ELSE (normal mode or bulk with "ask"):**
+
+Output merge preview to user:
 ```
 Existing skill "{skill-name}" found!
 
@@ -189,7 +250,7 @@ Merge preview:
 Continue with merge? (y/n)
 ```
 
-**Step 4.3: Get user approval**
+**Step 4.3: Get user approval (if not in auto-merge mode)**
 
 Use AskUserQuestion:
 ```
@@ -235,7 +296,7 @@ If user cancels, exit workflow.
 **Frontmatter merging:**
 - Combine trigger phrases (keep unique ones)
 - Expand description if new use cases added
-- Increment version (patch bump: 0.1.0 → 0.1.1)
+- Preserve existing optional fields (allowed-tools, context, etc.)
 
 **Output:** Merged skill with combined content
 
@@ -258,7 +319,7 @@ Only create directories that will be used.
 
 **Determine what goes where:**
 
-**SKILL.md content (target 1,500-2,000 words):**
+**SKILL.md content (target under 500 lines):**
 - Purpose (2-4 sentences)
 - When to Use (3-6 bullet points)
 - Core concepts (essential knowledge only)
@@ -303,17 +364,28 @@ Only create directories that will be used.
 **Frontmatter template:**
 ```yaml
 ---
-name: [Skill Name in Title Case]
+name: [kebab-case-skill-name]
 description: This skill should be used when the user asks to "[phrase 1]", "[phrase 2]", "[phrase 3]", or mentions [key concept]. [Brief explanation].
-version: 0.1.0
 ---
 ```
+
+**Important:** Only use official frontmatter fields: `name`, `description`, `disable-model-invocation`, `user-invocable`, `allowed-tools`, `model`, `context`, `agent`, `argument-hint`, `hooks`. Do NOT add `version` or other non-standard fields.
+
+**Name rules:**
+- Lowercase letters, numbers, and hyphens only
+- Max 64 characters
+- If omitted, uses directory name
+
+**Description rules:**
+- Max 1024 characters
+- Third person ("This skill should be used when...")
+- Include 3-7 specific trigger phrases in quotes
 
 **Step 6.2: Write SKILL.md**
 
 Use Write tool to create SKILL.md with:
-- Generated frontmatter
-- Organized core content (1,500-2,000 words)
+- Generated frontmatter (only valid fields)
+- Organized core content (under 500 lines)
 - Imperative writing style
 - References to supporting files
 - Summary section
@@ -335,10 +407,11 @@ For each extracted code block, use Write tool:
 **Step 6.5: Validate quality**
 
 **Check SKILL.md:**
-- ✓ Frontmatter has name, description, version
+- ✓ Frontmatter has name (kebab-case, max 64 chars) and description (max 1024 chars)
+- ✓ No invalid frontmatter fields (e.g., `version` is not valid)
 - ✓ Description uses third person and has trigger phrases
 - ✓ Body uses imperative form (not second person)
-- ✓ Word count is 1,500-2,000 (warn if >3,000)
+- ✓ Content is under 500 lines (move excess to references/)
 - ✓ References supporting files if they exist
 
 **Check structure:**
@@ -390,7 +463,15 @@ Auto-fixes applied:
   - Moved 2 sections to references/
 ```
 
-**Step 7.2: Ask about source file cleanup**
+**Step 7.2: Handle source file cleanup (bulk-aware)**
+
+**IF bulk context exists AND deferCleanup is true:**
+- Skip cleanup question
+- Return source file path to command for deferred cleanup
+- Log: "Cleanup deferred to batch end"
+- Proceed to Step 7.4
+
+**ELSE (normal mode or bulk with immediate cleanup):**
 
 Use AskUserQuestion:
 ```
@@ -436,6 +517,32 @@ Next steps:
 
 To test: Try asking "how do I [trigger phrase]" in a new session
 ```
+
+**Step 7.5: Register skill in usage tracking**
+
+Register the newly created skill in `.claude/md-to-skill-usage.json` so usage tracking starts from a known baseline.
+
+Use Read to check if `.claude/md-to-skill-usage.json` exists:
+- If it exists, read it and add the new skill entry
+- If not, create it with the new skill
+
+Add the skill with:
+```json
+{
+  "skills": {
+    "{skill-name}": {
+      "trigger_count": 0,
+      "first_seen": "<current ISO timestamp>",
+      "last_triggered": null
+    }
+  },
+  "total_invocations": 0
+}
+```
+
+Use Write tool to save the updated tracking file. If the file already has other skills, preserve them and only add/update the new entry.
+
+This enables the `/skill-health` command to track this skill's usage over time.
 
 **Workflow complete.**
 
@@ -527,7 +634,7 @@ Ensure every created skill meets:
 - ✓ Organized files (references/, examples/ if needed)
 
 **Content:**
-- ✓ SKILL.md is lean (1,500-2,000 words, max 3,000)
+- ✓ SKILL.md is under 500 lines
 - ✓ Imperative writing style throughout
 - ✓ Progressive disclosure (detailed content in references/)
 - ✓ Code blocks >10 lines extracted to examples/
@@ -577,12 +684,13 @@ For any unrecoverable error, report clearly to user and exit gracefully.
 
 ## Key Principles
 
-1. **User control**: Ask for decisions, don't assume
+1. **User control**: Ask for decisions, don't assume (unless in bulk mode with smart defaults)
 2. **Quality first**: Validate and auto-fix whenever possible
 3. **Progressive disclosure**: Keep SKILL.md lean, use references/
 4. **Intelligent merging**: Deduplicate and combine intelligently
 5. **Clear communication**: Show previews, explain actions
 6. **Iterative improvement**: Support re-conversion and merging
+7. **Efficient batching**: Support bulk mode for faster multi-file processing
 
 ## Skills Used
 

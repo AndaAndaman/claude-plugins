@@ -13,7 +13,11 @@ arguments:
   - name: topic
     description: Optional topic to filter potential skills
     required: false
-argument-hint: [optional-topic]
+  - name: bulk
+    description: Enable bulk mode with smart defaults for batch processing
+    required: false
+    flag: true
+argument-hint: [optional-topic] [--bulk]
 ---
 
 # Learn Skill Command
@@ -28,6 +32,7 @@ This command automates skill discovery by:
 - Filtering by topic if specified
 - Showing selection list with confidence scores
 - Batch converting selected files using skill-builder agent
+- Supporting bulk mode for faster batch processing with smart defaults
 
 ## Execution Workflow
 
@@ -113,9 +118,101 @@ Found 5 markdown files, 3 are skill candidates:
 Select files to convert (comma-separated, e.g. 1,3): _
 ```
 
+### Step 4.5: Batch Configuration (Bulk Mode Only)
+
+If `--bulk` flag is present, show batch configuration prompt before processing files.
+
+**Purpose:** Configure settings once for all selected files to reduce repetitive questions.
+
+**Ask user via AskUserQuestion:**
+```
+{
+  "questions": [
+    {
+      "question": "Choose default scope for all files",
+      "header": "Batch Configuration - Scope",
+      "options": [
+        {
+          "label": "User scope",
+          "description": "~/.claude-plugins/skills/ - Available in all projects"
+        },
+        {
+          "label": "Project scope",
+          "description": "./.claude/skills/ - Available only in this project"
+        }
+      ]
+    },
+    {
+      "question": "How should skill names be selected?",
+      "header": "Batch Configuration - Name Selection",
+      "options": [
+        {
+          "label": "Auto-accept recommended",
+          "description": "Use first (recommended) name option automatically"
+        },
+        {
+          "label": "Ask for each file",
+          "description": "Show 3 options for each file"
+        }
+      ]
+    },
+    {
+      "question": "How should conflicts be handled?",
+      "header": "Batch Configuration - Conflicts",
+      "options": [
+        {
+          "label": "Auto-merge",
+          "description": "Automatically merge with existing skills"
+        },
+        {
+          "label": "Ask for each",
+          "description": "Show merge preview and ask for approval"
+        },
+        {
+          "label": "Skip conflicts",
+          "description": "Skip files that have name conflicts"
+        }
+      ]
+    },
+    {
+      "question": "When should source files be cleaned up?",
+      "header": "Batch Configuration - Cleanup",
+      "options": [
+        {
+          "label": "Ask at end",
+          "description": "Review all files before deleting (recommended)"
+        },
+        {
+          "label": "Delete all",
+          "description": "Automatically delete all source files after conversion"
+        },
+        {
+          "label": "Keep all",
+          "description": "Keep all source files"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Store batch configuration:**
+- `defaultScope`: "user" or "project"
+- `autoAcceptName`: true or false
+- `conflictHandling`: "auto-merge", "ask", or "skip"
+- `cleanupMode`: "ask-end", "delete-all", or "keep-all"
+
+**Pass to skill-builder agent:** Create bulk context object with configuration and progress tracking.
+
+**Output:** Batch configuration stored for processing
+
 ### Step 5: Batch Conversion
 
-For each selected file:
+**Mode detection:** Check if `--bulk` flag is present.
+
+#### Sequential Mode (Default)
+
+When `--bulk` flag is NOT present:
 
 1. Launch skill-builder agent using `Task(skill-builder)`
 2. Agent performs full conversion workflow:
@@ -136,6 +233,161 @@ For each selected file:
 
    Skills created at: ~/.claude-plugins/skills/
    ```
+
+#### Bulk Mode (--bulk flag)
+
+When `--bulk` flag IS present:
+
+**Step 5.1: Initialize bulk processing**
+- Create bulk context object with batch configuration
+- Initialize progress tracker
+- Prepare source file list for deferred cleanup
+
+**Bulk context structure:**
+```javascript
+{
+  bulkMode: true,
+  defaultScope: "user" or "project",
+  autoAcceptName: true or false,
+  conflictHandling: "auto-merge" or "ask" or "skip",
+  deferCleanup: true (unless cleanupMode is "delete-all" or "keep-all"),
+  currentFile: 1,
+  totalFiles: 5,
+  processedFiles: []
+}
+```
+
+**Step 5.2: Show processing header**
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Starting batch conversion...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Step 5.3: Process each file with progress tracking**
+
+For each selected file:
+
+1. Update progress indicator:
+   ```
+   Progress [2/5]:
+   ✓ oauth-flow.md → oauth-integration-guide
+   → session-mgmt.md (processing...)
+     ○ api-security.md (queued)
+     ○ database-queries.md (queued)
+     ○ error-handling.md (queued)
+   ```
+
+2. Launch skill-builder agent with bulk context
+3. Agent uses bulk configuration (skips certain questions)
+4. Collect results:
+   - Source file path
+   - Skill name
+   - Target location
+   - Status (created, merged, failed, skipped)
+   - Error message (if failed)
+   - Final version
+
+5. Update progress tracker
+
+**Progress symbols:**
+- ○ = Queued (not started)
+- → = Processing (currently running)
+- ✓ = Success (completed)
+- ✗ = Failed (error occurred)
+- ⊘ = Skipped (conflict skipped)
+
+**Error handling:**
+- If file fails, mark as failed and continue
+- Don't abort entire batch
+- Collect error details for summary
+
+**Step 5.4: Generate batch summary**
+
+After all files processed:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BATCH CONVERSION COMPLETE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Successfully converted: 4 files
+✗ Failed: 1 file
+⊘ Skipped: 0 files
+
+Results:
+  ✓ oauth-flow.md → oauth-integration-guide
+    Location: ~/.claude-plugins/skills/oauth-integration-guide/
+    Status: New skill created (v0.1.0)
+
+  ✓ session-mgmt.md → session-management-patterns
+    Location: ~/.claude-plugins/skills/session-management-patterns/
+    Status: Merged with existing (v0.1.0 → v0.1.1)
+
+  ✓ api-security.md → api-security-best-practices
+    Location: ~/.claude-plugins/skills/api-security-best-practices/
+    Status: New skill created (v0.1.0)
+
+  ✗ database-queries.md
+    Status: Failed
+    Error: Unable to parse structure - content too fragmented
+
+  ✓ error-handling.md → error-handling-strategies
+    Location: ~/.claude-plugins/skills/error-handling-strategies/
+    Status: New skill created (v0.1.0)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+**Step 5.5: Handle deferred cleanup (if configured)**
+
+If `cleanupMode` is "ask-end":
+
+Show source file list and ask user:
+```
+Source files ready for cleanup:
+  • oauth-flow.md
+  • session-mgmt.md
+  • api-security.md
+  • error-handling.md
+  (database-queries.md excluded - conversion failed)
+
+Delete all 4 source files? [y/N]:
+```
+
+Use AskUserQuestion:
+```
+{
+  "questions": [{
+    "question": "Delete successfully converted source files?",
+    "header": "Cleanup",
+    "options": [
+      {
+        "label": "Yes, delete all",
+        "description": "Remove all successfully converted source files"
+      },
+      {
+        "label": "No, keep all",
+        "description": "Keep all source files"
+      }
+    ]
+  }]
+}
+```
+
+If user approves:
+- Delete each successfully converted source file
+- Show confirmation: `✓ Deleted 4 source files`
+
+If `cleanupMode` is "delete-all":
+- Automatically delete all successfully converted source files
+- Show confirmation in summary
+
+If `cleanupMode` is "keep-all":
+- Skip cleanup entirely
+- Show note: "Source files kept as requested"
+
+**Output:** Batch conversion complete with summary and cleanup handled
 
 ## User Interaction
 
@@ -291,6 +543,132 @@ Select files to convert (1-3 or 'all'): all
 [... conversions proceed ...]
 ```
 
+### Bulk Mode Example
+
+```
+> /learn-skill --bulk
+
+Scanning directory for potential skills...
+
+Found 8 markdown files, 5 are skill candidates:
+
+1. oauth-flow.md (92% confidence) - 2,100 words
+   Topics: OAuth, authentication, JWT
+
+2. session-mgmt.md (88% confidence) - 1,650 words
+   Topics: Sessions, authentication, cookies
+
+3. api-security.md (85% confidence) - 1,500 words
+   Topics: API security, rate limiting, tokens
+
+4. database-queries.md (79% confidence) - 1,200 words
+   Topics: Database, SQL, query optimization
+
+5. error-handling.md (76% confidence) - 1,100 words
+   Topics: Error handling, exceptions, logging
+
+Select files to convert (comma-separated, e.g. 1,3 or 'all'): all
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BATCH CONFIGURATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Choose default scope for all files:
+1. User scope
+2. Project scope
+
+> 1
+
+How should skill names be selected?
+1. Auto-accept recommended
+2. Ask for each file
+
+> 1
+
+How should conflicts be handled?
+1. Auto-merge
+2. Ask for each
+3. Skip conflicts
+
+> 1
+
+When should source files be cleaned up?
+1. Ask at end
+2. Delete all
+3. Keep all
+
+> 1
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Starting batch conversion...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Progress [1/5]:
+→ oauth-flow.md (processing...)
+  ○ session-mgmt.md (queued)
+  ○ api-security.md (queued)
+  ○ database-queries.md (queued)
+  ○ error-handling.md (queued)
+
+Progress [2/5]:
+✓ oauth-flow.md → oauth-integration-guide
+→ session-mgmt.md (processing...)
+  ○ api-security.md (queued)
+  ○ database-queries.md (queued)
+  ○ error-handling.md (queued)
+
+Progress [3/5]:
+✓ oauth-flow.md → oauth-integration-guide
+✓ session-mgmt.md → session-management-patterns (merged)
+→ api-security.md (processing...)
+  ○ database-queries.md (queued)
+  ○ error-handling.md (queued)
+
+Progress [4/5]:
+✓ oauth-flow.md → oauth-integration-guide
+✓ session-mgmt.md → session-management-patterns (merged)
+✓ api-security.md → api-security-best-practices
+→ database-queries.md (processing...)
+  ○ error-handling.md (queued)
+
+Progress [5/5]:
+✓ oauth-flow.md → oauth-integration-guide
+✓ session-mgmt.md → session-management-patterns (merged)
+✓ api-security.md → api-security-best-practices
+✓ database-queries.md → database-query-patterns
+→ error-handling.md (processing...)
+
+Progress [5/5]:
+✓ oauth-flow.md → oauth-integration-guide
+✓ session-mgmt.md → session-management-patterns (merged)
+✓ api-security.md → api-security-best-practices
+✓ database-queries.md → database-query-patterns
+✓ error-handling.md → error-handling-strategies
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BATCH CONVERSION COMPLETE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Successfully converted: 5 files
+
+All skills saved to: ~/.claude-plugins/skills/
+
+Source files ready for cleanup:
+  • oauth-flow.md
+  • session-mgmt.md
+  • api-security.md
+  • database-queries.md
+  • error-handling.md
+
+Delete all 5 source files? [y/N]:
+
+> y
+
+✓ Deleted 5 source files
+
+Conversion complete! Your skills are ready to use.
+```
+
 ## Edge Cases
 
 ### No Candidates Found
@@ -360,6 +738,14 @@ Successfully created skills:
 - Review confidence scores before selecting
 - Select 'all' for batch processing
 - Consider merging related files before conversion
+- Use `--bulk` flag when converting multiple files to save time
+
+**Bulk mode benefits:**
+- Configure once, apply to all files
+- 70-80% fewer questions during conversion
+- Real-time progress tracking
+- Comprehensive batch summary
+- Deferred cleanup decision
 
 **Iterative learning:**
 1. Run /learn-skill to discover skill candidates

@@ -1,7 +1,6 @@
 ---
-name: Claude Code Hook Development
+name: hook-development
 description: This skill should be used when the user asks to "create a hook", "add a PreToolUse hook", "validate tool use", "implement prompt-based hooks", "configure hook events", or mentions hook events (PreToolUse, PostToolUse, Stop, SessionStart). Provides comprehensive guidance for creating and implementing Claude Code plugin hooks with focus on advanced prompt-based hooks API.
-version: 1.0.0
 ---
 
 # Claude Code Hook Development

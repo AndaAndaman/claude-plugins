@@ -213,17 +213,21 @@ Implement resources from Step 2 first:
 
 ```yaml
 ---
-name: Descriptive Skill Name
+name: kebab-case-skill-name
 description: This skill should be used when the user asks to "specific phrase 1", "specific phrase 2", "specific phrase 3", or mentions technical-term. Brief explanation of what skill provides.
-version: 0.1.0
 ---
 ```
 
+**Name rules:** Kebab-case, lowercase letters/numbers/hyphens only, max 64 chars. If omitted, uses directory name.
+
 **Description requirements:**
+- Max 1024 characters
 - Third-person format
 - 3-7 specific trigger phrases in quotes
 - Key concepts or terminology
 - Brief 1-2 sentence purpose at end
+
+**Optional fields:** `disable-model-invocation`, `user-invocable`, `allowed-tools`, `model`, `context`, `agent`, `argument-hint`, `hooks`. Do NOT use `version` (not a valid field).
 
 **Good description example:**
 ```yaml
@@ -244,7 +248,7 @@ Answer these questions in imperative form:
 2. **When should the skill be used?** (List scenarios)
 3. **How should Claude use it?** (Reference all resources from Step 3)
 
-**Target length:** 1,500-2,000 words
+**Target length:** Under 500 lines
 
 **Keep lean by:**
 - Moving detailed content to `references/`
@@ -336,7 +340,7 @@ Verify description:
 Check SKILL.md body:
 - [ ] Uses imperative/infinitive form (verb-first)
 - [ ] Avoids second person ("you should...")
-- [ ] Is focused and lean (1,500-2,000 words ideal, <3,000 max)
+- [ ] Is focused and lean (under 500 lines)
 - [ ] References all supporting files
 - [ ] Has clear section structure
 
@@ -461,7 +465,7 @@ For simple skills, minimum process:
 1. **Understand:** What will users ask?
 2. **Plan:** What resources needed?
 3. **Create:** Make SKILL.md with frontmatter
-4. **Write:** Add body content (1,500-2,000 words)
+4. **Write:** Add body content (under 500 lines)
 5. **Test:** Verify triggers and usefulness
 
 ### Standard Steps

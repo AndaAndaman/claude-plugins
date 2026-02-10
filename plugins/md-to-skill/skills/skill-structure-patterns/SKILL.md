@@ -1,7 +1,6 @@
 ---
-name: Claude Skill Structure Patterns
+name: skill-structure-patterns
 description: This skill should be used when the user asks to "create a Claude skill", "skill structure best practices", "skill frontmatter format", "generate trigger phrases", "progressive disclosure for skills", "organize skill references", or when converting content to Claude Code skills. Provides comprehensive patterns, templates, and examples for creating effective Claude skills.
-version: 0.1.0
 ---
 
 # Claude Skill Structure Patterns
@@ -44,9 +43,9 @@ skill-name/
 
 **SKILL.md** (required):
 - Core skill content
-- Target: 1,500-2,000 words
-- Maximum: 3,000 words (beyond this, use references/)
+- Keep under 500 lines for optimal performance
 - Always loaded when skill triggers
+- Move detailed content to supporting files if exceeded
 
 **references/** (optional):
 - Detailed documentation by topic
@@ -68,20 +67,36 @@ skill-name/
 
 ## SKILL.md Format
 
-### Required Frontmatter
+### Frontmatter
 
 ```yaml
 ---
-name: Descriptive Skill Name
+name: my-skill-name
 description: This skill should be used when the user asks to "specific phrase 1", "specific phrase 2", "specific phrase 3", or mentions "key concept". Brief explanation of what skill provides.
-version: 0.1.0
 ---
 ```
 
-**Frontmatter fields:**
-- `name`: Human-readable skill name (Title Case)
-- `description`: Third-person, with specific trigger phrases (critical for activation)
-- `version`: Semantic versioning (0.1.0, 1.0.0, etc.)
+**Core fields:**
+- `name`: Kebab-case, lowercase letters/numbers/hyphens only (max 64 chars). If omitted, uses directory name.
+- `description`: What the skill does and when to use it. Claude uses this to decide when to load the skill (max 1024 chars). **Recommended** - primary trigger mechanism.
+
+**Optional fields:**
+- `disable-model-invocation`: Set `true` to prevent Claude from auto-loading. User must invoke via `/name`. Use for workflows with side effects (`/commit`, `/deploy`).
+- `user-invocable`: Set `false` to hide from `/` menu. Use for background knowledge only Claude should invoke.
+- `allowed-tools`: Tools Claude can use without asking permission (e.g., `Read, Grep, Glob`).
+- `model`: Model override when skill is active.
+- `context`: Set `fork` to run in isolated subagent context.
+- `agent`: Subagent type for fork execution (`Explore`, `Plan`, `general-purpose`, or custom agent name).
+- `argument-hint`: Hint for autocomplete (e.g., `[issue-number]`, `[filename] [format]`).
+- `hooks`: Hooks scoped to this skill's lifecycle.
+
+**String substitutions in content:**
+- `$ARGUMENTS` - All arguments passed when invoking
+- `$ARGUMENTS[N]` or `$N` - Specific argument by 0-based index
+- `${CLAUDE_SESSION_ID}` - Current session ID
+
+**Dynamic context injection:**
+- `` !`shell command` `` - Runs before content is sent to Claude, output replaces placeholder
 
 ### Description Best Practices
 
@@ -138,7 +153,7 @@ Claude skills use progressive disclosure to manage context:
    - Skill name and description from frontmatter
    - Used for skill selection and activation
 
-2. **SKILL.md body (loaded when triggered)** - 1,500-2,000 words
+2. **SKILL.md body (loaded when triggered)** - Under 500 lines
    - Core concepts and procedures
    - Quick reference
    - Pointers to references/examples/scripts
@@ -295,6 +310,12 @@ Use these templates for generating triggers:
 
 ### SKILL.md Quality Checks
 
+**Frontmatter quality:**
+- ✅ `name` is kebab-case (lowercase, hyphens, max 64 chars)
+- ✅ `description` under 1024 characters
+- ✅ No invalid fields (e.g., `version` is not a valid field)
+- ✅ Optional fields used correctly (`disable-model-invocation`, `allowed-tools`, etc.)
+
 **Description quality:**
 - ✅ Uses third person ("This skill should be used when...")
 - ✅ Includes 3-7 specific trigger phrases in quotes
@@ -306,7 +327,7 @@ Use these templates for generating triggers:
 - ✅ Explains when to use skill
 - ✅ Provides step-by-step procedures
 - ✅ References supporting files (if they exist)
-- ✅ Stays within 3,000 words (ideally 1,500-2,000)
+- ✅ Under 500 lines (move detailed content to references/)
 
 **Writing style:**
 - ✅ Uses imperative/infinitive form (verb-first)
@@ -322,7 +343,7 @@ Use these templates for generating triggers:
 ### Progressive Disclosure Check
 
 **Is SKILL.md lean enough?**
-- Word count < 3,000 (ideally 1,500-2,000)
+- Under 500 lines
 - Contains only essential information
 - Pointers to references/ for details
 - No duplicate content across files
@@ -349,8 +370,8 @@ When quality issues detected:
 - Generate specific phrases from content
 - Replace vague phrases with concrete ones
 
-**Too long SKILL.md:**
-- Identify sections > 500 words
+**Too long SKILL.md (over 500 lines):**
+- Identify large sections
 - Move detailed content to references/
 - Keep summaries and overviews in SKILL.md
 - Add references section pointing to new files
@@ -429,7 +450,7 @@ When quality issues detected:
 
 ### Pattern 1: Simple Topic
 
-**When:** Single cohesive topic, < 2,000 words
+**When:** Single cohesive topic, under 500 lines
 
 **Structure:**
 ```
@@ -444,7 +465,7 @@ skill-name/
 
 ### Pattern 2: Topic with Details
 
-**When:** Core topic with detailed sub-topics, 2,000-5,000 words
+**When:** Core topic with detailed sub-topics, SKILL.md approaching 500 lines
 
 **Structure:**
 ```
@@ -456,7 +477,7 @@ skill-name/
 ```
 
 **SKILL.md contains:**
-- Overview and core concepts (1,500-2,000 words)
+- Overview and core concepts (under 500 lines)
 - Pointers to references/
 
 **references/ contains:**
@@ -466,7 +487,7 @@ skill-name/
 
 ### Pattern 3: Complete Skill Package
 
-**When:** Complex domain with examples and utilities, > 5,000 words
+**When:** Complex domain with examples and utilities, exceeds 500 lines
 
 **Structure:**
 ```
@@ -517,12 +538,13 @@ For complete templates and examples, see:
 
 Creating effective Claude skills requires:
 
-1. **Strong trigger descriptions** - Third person, specific phrases, concrete scenarios
-2. **Progressive disclosure** - Lean SKILL.md (1,500-2,000 words), detailed references/
+1. **Strong trigger descriptions** - Third person, specific phrases, concrete scenarios (max 1024 chars)
+2. **Progressive disclosure** - Lean SKILL.md (under 500 lines), detailed references/
 3. **Imperative writing style** - Verb-first instructions, no second person
 4. **Clear organization** - Logical structure, referenced resources
-5. **Quality validation** - Check description, content, style, structure
-6. **Proper naming** - Kebab-case, descriptive names
+5. **Quality validation** - Check frontmatter fields, description, content, style
+6. **Proper naming** - Kebab-case for name field and directory names
+7. **Valid frontmatter only** - Use only official fields (name, description, disable-model-invocation, user-invocable, allowed-tools, model, context, agent, argument-hint, hooks)
 
 Focus on making skills easy to trigger (strong phrases), quick to load (lean SKILL.md), and comprehensive when needed (well-organized references/).
 

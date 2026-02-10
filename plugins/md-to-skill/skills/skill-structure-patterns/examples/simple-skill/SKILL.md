@@ -1,7 +1,6 @@
 ---
-name: PDF Rotation Tool
+name: pdf-rotation-tool
 description: This skill should be used when the user asks to "rotate PDF", "turn PDF pages", "flip PDF orientation", or mentions PDF rotation. Provides quick PDF rotation utility without external dependencies.
-version: 1.0.0
 ---
 
 # PDF Rotation Tool

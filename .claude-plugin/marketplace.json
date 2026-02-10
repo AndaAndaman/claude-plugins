@@ -57,8 +57,8 @@
     },
     {
       "name": "md-to-skill",
-      "version": "0.1.1",
-      "description": "Convert LLM-generated markdown files into organized Claude skills with automatic structure analysis, quality validation, and intelligent content merging.",
+      "version": "0.3.0",
+      "description": "Convert LLM-generated markdown files into organized Claude skills with automatic structure analysis, quality validation, batch processing with smart defaults, intelligent content merging, and continuous learning via usage tracking.",
       "source": "./plugins/md-to-skill",
       "author": {
         "name": "FlowAccount Developer",
@@ -77,8 +77,8 @@
     },
     {
       "name": "feature-sprint",
-      "version": "0.1.0",
-      "description": "One iteration MVP development with parallel analysis. Scout finds location, Guard spots risks, Tester defines verification. Inspired by multi-agent dev teams.",
+      "version": "0.2.0",
+      "description": "One iteration MVP development with true parallel analysis. Commands spawn Scout, Guard, and Tester agents directly for guaranteed parallelization.",
       "source": "./plugins/feature-sprint",
       "author": {
         "name": "FlowAccount Developer",

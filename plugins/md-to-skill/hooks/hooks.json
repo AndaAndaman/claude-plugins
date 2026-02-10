@@ -1,0 +1,28 @@
+{
+  "description": "md-to-skill hooks - watch for markdown changes and track skill usage",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/md-watch_stop.py\"",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/skill-usage_posttooluse.py\"",
+            "timeout": 5000
+          }
+        ]
+      }
+    ]
+  }
+}

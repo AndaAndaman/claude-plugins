@@ -1,7 +1,6 @@
 ---
-name: Markdown Parsing for Skill Conversion
+name: markdown-parsing
 description: This skill should be used when the user asks to "parse markdown", "extract markdown structure", "split markdown by headings", "detect code blocks in markdown", "analyze markdown content", or when converting markdown files to Claude skills. Provides techniques for analyzing and extracting structured content from markdown files.
-version: 0.1.0
 ---
 
 # Markdown Parsing for Skill Conversion

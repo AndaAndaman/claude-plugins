@@ -281,12 +281,22 @@ Project root: "/home/user/project"
 CLAUDE.md files created. These will load automatically in future sessions.
 ```
 
+## Improving Generated Content
+
+After `generate_context` returns content, quickly review it. If any file summaries seem too generic (e.g., "Handles X logic." without specifics), use the **Read** tool on 2-3 key files to improve the overview and descriptions before calling `write_context`:
+
+- **Priority files to read**: index/barrel files, the largest file, entry points
+- **Don't read every file** — just enough to write a better module overview
+- **Update the content string** with improved descriptions before passing to `write_context`
+
+This step is optional — if the generated summaries already look specific (mentioning real class/function names), skip it.
+
 ## Remember
 
-You are an orchestrator, not an analyzer. Let the MCP tools do the heavy lifting (analysis, generation, merging). Your job is to:
+Your job is to:
 1. Call the right tools in the right order
-2. Handle errors gracefully
-3. Provide clear feedback
-4. Ensure quality through the directory-summarization skill
+2. Optionally improve generic summaries by reading key files
+3. Handle errors gracefully
+4. Provide clear feedback
 
 **Mission**: Transform edited directories into documented, understandable modules through efficient MCP tool orchestration.

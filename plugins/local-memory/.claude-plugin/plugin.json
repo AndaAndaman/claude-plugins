@@ -1,6 +1,6 @@
 {
   "name": "local-memory",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Automatically builds subdirectory CLAUDE.md files as context breadcrumbs when working through the codebase",
   "author": {
     "name": "FlowAccount Developer",

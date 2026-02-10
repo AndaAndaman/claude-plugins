@@ -124,6 +124,147 @@ def detect_language(files: List[str]) -> str:
     return ext_map.get(most_common_ext, most_common_ext[1:])
 
 
+def summarize_file(file_path: str, language: str) -> str:
+    """Read first ~80 lines of a file and generate a 1-2 sentence summary.
+
+    Extracts docstrings/module comments, class/function names, and infers purpose.
+    """
+    try:
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = []
+            for i, line in enumerate(f):
+                if i >= 80:
+                    break
+                lines.append(line)
+    except Exception:
+        return ""
+
+    if not lines:
+        return ""
+
+    content = ''.join(lines)
+    file_name = os.path.basename(file_path)
+    stem = Path(file_path).stem
+
+    # --- Extract docstring / leading comment ---
+    docstring = ""
+
+    if language == 'python':
+        # Python: triple-quote docstring at top of file
+        m = re.search(r'^(?:\s*#[^\n]*\n)*\s*(?:\'\'\'|""")(.*?)(?:\'\'\'|""")', content, re.DOTALL)
+        if m:
+            docstring = m.group(1).strip().split('\n')[0]  # first line only
+        else:
+            # Fall back to first comment block
+            comment_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith('#') and not stripped.startswith('#!'):
+                    comment_lines.append(stripped.lstrip('# ').strip())
+                elif stripped and not stripped.startswith('#'):
+                    break
+            if comment_lines:
+                docstring = comment_lines[0]
+
+    elif language in ['typescript', 'javascript']:
+        # JSDoc or block comment at top
+        m = re.search(r'/\*\*?\s*(.*?)(?:\*/)', content, re.DOTALL)
+        if m:
+            raw = m.group(1)
+            # Clean JSDoc: remove leading * and @tags
+            cleaned = []
+            for cline in raw.split('\n'):
+                cline = cline.strip().lstrip('* ').strip()
+                if cline.startswith('@'):
+                    break
+                if cline:
+                    cleaned.append(cline)
+            if cleaned:
+                docstring = cleaned[0]
+        else:
+            # Single-line comments at top
+            comment_lines = []
+            for line in lines:
+                stripped = line.strip()
+                if stripped.startswith('//'):
+                    comment_lines.append(stripped.lstrip('/ ').strip())
+                elif stripped and not stripped.startswith('//'):
+                    break
+            if comment_lines:
+                docstring = comment_lines[0]
+
+    elif language in ['csharp', 'java', 'go']:
+        # Block or line comments
+        m = re.search(r'/\*\*?\s*(.*?)(?:\*/)', content, re.DOTALL)
+        if m:
+            raw = m.group(1)
+            cleaned = []
+            for cline in raw.split('\n'):
+                cline = cline.strip().lstrip('* ').strip()
+                if cline.startswith('@') or cline.startswith('<'):
+                    break
+                if cline:
+                    cleaned.append(cline)
+            if cleaned:
+                docstring = cleaned[0]
+
+    # --- Extract class and function names ---
+    classes = []
+    functions = []
+
+    if language == 'python':
+        classes = re.findall(r'^class\s+(\w+)', content, re.MULTILINE)
+        functions = re.findall(r'^def\s+(\w+)', content, re.MULTILINE)
+        # Filter out dunder/private
+        functions = [f for f in functions if not f.startswith('_')]
+
+    elif language in ['typescript', 'javascript']:
+        classes = re.findall(r'(?:export\s+)?class\s+(\w+)', content)
+        # Named exports, arrow functions, regular functions
+        functions = re.findall(r'(?:export\s+)?(?:async\s+)?function\s+(\w+)', content)
+        arrow_fns = re.findall(r'export\s+(?:const|let)\s+(\w+)\s*=', content)
+        functions.extend(arrow_fns)
+
+    elif language == 'csharp':
+        classes = re.findall(r'(?:public|internal|static)\s+(?:partial\s+)?class\s+(\w+)', content)
+        functions = re.findall(r'(?:public|private|protected|internal|static)\s+\w+\s+(\w+)\s*\(', content)
+
+    elif language == 'go':
+        functions = re.findall(r'^func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)', content, re.MULTILINE)
+
+    elif language == 'java':
+        classes = re.findall(r'(?:public|private|protected)\s+(?:abstract\s+)?class\s+(\w+)', content)
+        functions = re.findall(r'(?:public|private|protected)\s+\w+\s+(\w+)\s*\(', content)
+
+    # --- Build summary ---
+    if docstring:
+        return docstring
+
+    # Infer from definitions
+    parts = []
+    if classes:
+        parts.append(f"Defines {', '.join(classes[:3])}")
+        if len(classes) > 3:
+            parts[-1] += f" and {len(classes) - 3} more classes"
+    if functions:
+        top_fns = functions[:4]
+        if classes:
+            parts.append(f"with functions {', '.join(top_fns)}")
+        else:
+            parts.append(f"Defines {', '.join(top_fns)}")
+            if len(functions) > 4:
+                parts[-1] += f" and {len(functions) - 4} more functions"
+
+    if parts:
+        # Infer purpose from filename
+        purpose = stem.replace('-', ' ').replace('_', ' ')
+        return ' '.join(parts) + f". Handles {purpose} logic."
+
+    # Last resort: name-based
+    purpose = stem.replace('-', ' ').replace('_', ' ')
+    return f"Handles {purpose} logic."
+
+
 def analyze_imports(file_path: str, language: str) -> Dict:
     """Analyze imports/exports in a file"""
     imports = {"internal": [], "external": []}
@@ -333,8 +474,40 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
         if "error" in analysis:
             return analysis_result
 
-        # Generate CLAUDE.md content
+        # Resolve directory path for file reading
+        abs_directory = directory
+        if not os.path.isabs(abs_directory):
+            abs_directory = os.path.join(project_root, abs_directory)
+
+        language = analysis.get("language", "unknown")
+
+        # Generate file summaries
+        file_summaries = {}
+        for file_name in analysis["files"]:
+            file_path = os.path.join(abs_directory, file_name)
+            summary = summarize_file(file_path, language)
+            file_summaries[file_name] = summary
+
+        # Infer module overview from file names and patterns
         dir_name = os.path.basename(directory.rstrip('/\\'))
+        patterns = analysis.get("patterns", [])
+        non_empty_summaries = [s for s in file_summaries.values() if s]
+
+        overview_parts = []
+        if any('controller' in p.lower() for p in patterns):
+            overview_parts.append(f"Contains API controllers for {dir_name} domain")
+        elif any('service' in p.lower() for p in patterns):
+            overview_parts.append(f"Provides services for {dir_name} functionality")
+        elif any('index' in p.lower() for p in patterns):
+            overview_parts.append(f"Module entry point for {dir_name}")
+
+        if not overview_parts:
+            purpose = dir_name.replace('-', ' ').replace('_', ' ')
+            overview_parts.append(f"Handles {purpose} functionality")
+
+        overview_parts.append(f"Contains {analysis['totalFiles']} files ({language})")
+        overview = ". ".join(overview_parts) + "."
+
         content = f"""<!-- AUTO-GENERATED by local-memory plugin on {datetime.now().strftime('%Y-%m-%d')} -->
 <!-- To preserve custom content, add sections outside auto-gen blocks -->
 
@@ -342,16 +515,17 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
 
 ## Overview
 
-[TODO: Add 2-3 sentence description of what this module does and its role in the system]
+{overview}
 
 ## Files
 
 """
 
-        # Add file descriptions
+        # Add file descriptions with real summaries
         for file_name in analysis["files"]:
+            summary = file_summaries.get(file_name, "")
             content += f"### {file_name}\n"
-            content += f"[TODO: 1-2 sentence description of what this file does]\n\n"
+            content += f"{summary}\n\n" if summary else f"{file_name}\n\n"
 
         if analysis["totalFiles"] > len(analysis["files"]):
             remaining = analysis["totalFiles"] - len(analysis["files"])
@@ -378,13 +552,13 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
             if all_internal:
                 content += "**Internal Dependencies:**\n"
                 for imp in sorted(all_internal):
-                    content += f"- `{imp}` - [Why needed]\n"
+                    content += f"- `{imp}`\n"
                 content += "\n"
 
             if all_external:
                 content += "**External Dependencies:**\n"
                 for imp in sorted(all_external)[:10]:  # Limit to 10
-                    content += f"- `{imp}` - [How used]\n"
+                    content += f"- `{imp}`\n"
                 content += "\n"
 
         content += "<!-- END AUTO-GENERATED CONTENT -->\n"
@@ -423,6 +597,7 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
                 print(f"Warning: Smart merge failed: {e}", file=sys.stderr)
 
         # Write file
+        existed = os.path.exists(claude_md_path)
         try:
             with open(claude_md_path, 'w', encoding='utf-8') as f:
                 f.write(content)
@@ -430,7 +605,7 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
             result = {
                 "success": True,
                 "path": claude_md_path,
-                "action": "updated" if os.path.exists(claude_md_path) else "created"
+                "action": "updated" if existed else "created"
             }
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
@@ -483,7 +658,7 @@ async def main():
             write_stream,
             InitializationOptions(
                 server_name="local-memory",
-                server_version="0.2.2",
+                server_version="0.2.4",
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={}

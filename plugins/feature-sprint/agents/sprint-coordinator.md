@@ -1,25 +1,18 @@
 ---
 name: sprint-coordinator
 description: |
-  Main orchestrator for feature-sprint plugin. Spawns Scout, Guard, and Tester agents in parallel,
-  then synthesizes their outputs into an implementation brief.
+  DEPRECATED: The /sprint command now spawns Scout, Guard, and Tester agents directly in parallel.
+  This coordinator is kept for backward compatibility but is no longer the primary orchestration method.
+
+  Use this agent only if you need a single agent to handle complex feature requests that require
+  clarification before analysis (e.g., vague requests like "enhance the plugin").
 
   <example>
-  Context: User wants to implement a small feature quickly
-  user: /sprint "Add logout button to the header"
-  assistant: I'll use the sprint-coordinator to analyze and create an implementation brief.
+  Context: User has a vague feature request that needs clarification
+  user: "Improve the authentication system"
+  assistant: I'll use the sprint-coordinator to clarify requirements and then analyze.
   <commentary>
-  Sprint-coordinator spawns 3 agents in parallel to analyze location, risks, and testing,
-  then synthesizes into a single actionable brief.
-  </commentary>
-  </example>
-
-  <example>
-  Context: User wants just the analysis without implementation
-  user: /sprint-plan "Add dark mode toggle"
-  assistant: I'll create an implementation brief for the dark mode toggle feature.
-  <commentary>
-  Sprint-coordinator runs analysis and presents brief for user review before any implementation.
+  For vague requests, the coordinator can first understand what's needed before spawning analysis agents.
   </commentary>
   </example>
 

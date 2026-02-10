@@ -1,7 +1,7 @@
 {
   "name": "feature-sprint",
-  "version": "0.1.0",
-  "description": "One iteration MVP development with parallel analysis perspectives. Scout finds location, Guard spots risks, Tester defines verification.",
+  "version": "0.2.0",
+  "description": "One iteration MVP development with true parallel analysis. Scout finds location, Guard spots risks, Tester defines verification. Commands spawn agents directly for guaranteed parallelization.",
   "author": {
     "name": "FlowAccount Developer",
     "email": "dev@flowaccount.com"

@@ -186,7 +186,56 @@ No skills found in:
 Create skills with /convert-to-skill or /learn-skill first.
 ```
 
+### Step 8: Cross-Reference Instincts
+
+Check for instinct data to enrich the report:
+
+**Scan instincts:**
+```
+Use Glob: .claude/md-to-skill-instincts/*.md
+```
+
+If instinct files exist:
+- Count total instincts and group by domain
+- Identify clusters with 3+ instincts and average confidence >= 0.5
+- Check for instincts with `evolved: true` that map to tracked skills
+
+**Add to report:**
+
+```
+### Instinct Pipeline
+
+**Total instincts:** {count} across {domain_count} domains
+**Observations collected:** {obs_count} entries
+
+| Domain | Instincts | Avg Confidence | Ready to Evolve? |
+|--------|-----------|---------------|-----------------|
+| code-style | 4 | 0.65 | Yes |
+| testing | 2 | 0.45 | No (need 3+) |
+| workflow | 3 | 0.40 | No (avg < 0.5) |
+
+{If any clusters ready:}
+Run /evolve to convert {count} ready cluster(s) into full skills.
+
+{If instincts exist but none ready:}
+Keep working! Run /observe after sessions to strengthen instincts.
+
+{If no instincts:}
+No instincts yet. Tool use is automatically observed.
+Run /observe after a few sessions to extract patterns.
+```
+
+**Skills from instincts:**
+For any tracked skill that was created via /evolve (check if any instinct has `evolved_to` matching the skill name), note it:
+```
+- {skill-name}: Evolved from {count} instincts ({date})
+```
+
 ## Related Commands
 
 - `/convert-to-skill <file>` - Convert markdown to skill
 - `/learn-skill [topic]` - Scan directory for skill candidates
+- `/observe` - Analyze observations and extract instincts
+- `/instinct-status` - View instinct report
+- `/evolve` - Cluster instincts into skills
+- `/instinct-prune` - Remove stale instincts

@@ -1,7 +1,7 @@
 {
   "name": "md-to-skill",
-  "version": "0.3.0",
-  "description": "Convert LLM-generated markdown files into organized Claude skills with automatic structure analysis, quality validation, batch processing with smart defaults, intelligent content merging, and continuous learning via usage tracking",
+  "version": "0.4.0",
+  "description": "Convert LLM-generated markdown files into organized Claude skills with automatic structure analysis, quality validation, batch processing with smart defaults, intelligent content merging, continuous learning via usage tracking, and instinct-based pattern detection from session observations",
   "author": {
     "name": "FlowAccount Developer",
     "email": "dev@flowaccount.com"
@@ -14,6 +14,9 @@
     "workflow",
     "knowledge-management",
     "continuous-learning",
-    "usage-tracking"
+    "usage-tracking",
+    "instincts",
+    "pattern-detection",
+    "observation"
   ]
 }

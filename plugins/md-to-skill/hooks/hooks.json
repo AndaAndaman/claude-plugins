@@ -22,6 +22,16 @@
             "timeout": 5000
           }
         ]
+      },
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/observe_posttooluse.py\"",
+            "timeout": 3000
+          }
+        ]
       }
     ]
   }

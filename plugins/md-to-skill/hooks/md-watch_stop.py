@@ -348,6 +348,28 @@ def check_file_quality(file_path: str, cwd: str, min_words: int) -> dict:
     return result
 
 
+def count_observations_since_last_analysis(cwd: str) -> int:
+    """Count observation entries in JSONL file since last /observe run.
+
+    Returns the total entry count (simple heuristic — a more precise approach
+    would track a 'last_analyzed_line' counter, but total count works for the
+    '>50 new entries' threshold).
+    """
+    obs_path = os.path.join(cwd, '.claude', 'md-to-skill-observations.jsonl')
+    if not os.path.exists(obs_path):
+        return 0
+
+    try:
+        count = 0
+        with open(obs_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if line.strip():
+                    count += 1
+        return count
+    except Exception:
+        return 0
+
+
 def main():
     """Main entry point for the stop hook."""
     try:
@@ -426,9 +448,35 @@ def main():
         # Update session state
         session_state['last_processed_line'] = last_line
 
+        # Check for accumulated observations (instinct suggestion)
+        observe_enabled = settings.get('observeEnabled', True)
+        obs_count = 0
+        instinct_suggestion = ""
+
+        if observe_enabled:
+            obs_count = count_observations_since_last_analysis(cwd)
+            debug_log(f"Observation count: {obs_count}")
+
+            if obs_count > 50:
+                instinct_suggestion = f"""
+
+---
+
+Also: {obs_count} tool use observations have accumulated.
+Run /observe to analyze patterns and extract instincts."""
+
         if not candidates:
             debug_log("EXIT: No qualifying candidates after filtering")
             save_session_state(state_path, session_state)
+
+            # Even without .md candidates, suggest /observe if observations accumulated
+            if instinct_suggestion:
+                debug_log("TRIGGER: Blocking stop for instinct suggestion only")
+                result = {
+                    'decision': 'block',
+                    'reason': f"{obs_count} tool use observations have accumulated.\nRun /observe to analyze patterns and extract instincts."
+                }
+                print(json.dumps(result))
             sys.exit(0)
 
         # Track suggested files
@@ -452,7 +500,7 @@ To convert, run:
   /convert-to-skill <file-path>
 
 Or scan all candidates:
-  /learn-skill"""
+  /learn-skill{instinct_suggestion}"""
 
         debug_log(f"TRIGGER: Blocking stop with {len(candidates)} candidates")
 

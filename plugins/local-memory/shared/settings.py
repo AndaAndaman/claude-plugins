@@ -2,12 +2,14 @@
 """
 Shared settings and constants for the local-memory plugin.
 
-Single source of truth for defaults, exclusions, and settings loading.
+Single source of truth for defaults, exclusions, settings loading, and file locking.
 Used by: stop hook, session_start hook, MCP server (context_builder).
 """
 
 import re
 import os
+import time
+import contextlib
 from pathlib import Path
 
 
@@ -26,6 +28,78 @@ DEFAULT_EXCLUDED_DIRS = [
     "coverage", ".next", ".nuxt", ".angular", "__pycache__",
     "temp", "tmp", "cache"
 ]
+
+# Pre-compiled YAML parsing patterns
+_FRONTMATTER_RE = re.compile(r'^---\s*\n(.*?)\n---', re.DOTALL | re.MULTILINE)
+_EXCLUDED_DIRS_RE = re.compile(r'excludedDirectories:\s*\n((?:\s+-\s+.+\n?)+)')
+_EXCLUDED_ITEMS_RE = re.compile(r'^\s+-\s+(.+)$', re.MULTILINE)
+
+
+@contextlib.contextmanager
+def file_lock(lock_path: str, timeout: float = 5.0):
+    """Cross-platform file lock. Creates {path}.lock file.
+
+    Uses fcntl on Unix or msvcrt on Windows for advisory locking.
+    Falls back to a polling-based lock file approach if neither is available.
+    """
+    lock_file = lock_path + '.lock'
+    fd = None
+    start = time.monotonic()
+
+    try:
+        os.makedirs(os.path.dirname(lock_file) or '.', exist_ok=True)
+
+        while True:
+            try:
+                fd = os.open(lock_file, os.O_CREAT | os.O_RDWR)
+
+                # Platform-specific locking
+                if os.name == 'nt':
+                    # Windows: msvcrt locking
+                    import msvcrt
+                    msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+                else:
+                    # Unix: fcntl locking
+                    import fcntl
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+                # Lock acquired
+                yield
+                return
+
+            except (OSError, IOError):
+                # Lock not available
+                if fd is not None:
+                    os.close(fd)
+                    fd = None
+
+                elapsed = time.monotonic() - start
+                if elapsed >= timeout:
+                    # Timeout: yield anyway to avoid blocking forever
+                    yield
+                    return
+
+                time.sleep(0.05)
+
+    finally:
+        if fd is not None:
+            try:
+                if os.name == 'nt':
+                    import msvcrt
+                    try:
+                        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                    except (OSError, IOError):
+                        pass
+                else:
+                    import fcntl
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                os.close(fd)
+            except (OSError, IOError):
+                pass
+            try:
+                os.remove(lock_file)
+            except OSError:
+                pass
 
 
 def load_settings(cwd: str) -> dict:
@@ -53,7 +127,7 @@ def load_settings(cwd: str) -> dict:
             content = f.read()
 
         # Extract YAML frontmatter between --- markers
-        match = re.search(r'^---\s*\n(.*?)\n---', content, re.DOTALL | re.MULTILINE)
+        match = _FRONTMATTER_RE.search(content)
         if not match:
             return settings
 
@@ -78,10 +152,10 @@ def load_settings(cwd: str) -> dict:
                     pass
 
         # Parse excludedDirectories list (only items under that key)
-        excluded_match = re.search(r'excludedDirectories:\s*\n((?:\s+-\s+.+\n?)+)', frontmatter)
+        excluded_match = _EXCLUDED_DIRS_RE.search(frontmatter)
         if excluded_match:
             excluded_list = excluded_match.group(1)
-            excluded_dirs = re.findall(r'^\s+-\s+(.+)$', excluded_list, re.MULTILINE)
+            excluded_dirs = _EXCLUDED_ITEMS_RE.findall(excluded_list)
             if excluded_dirs:
                 settings['excludedDirectories'].extend(excluded_dirs)
 

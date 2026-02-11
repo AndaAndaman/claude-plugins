@@ -9,13 +9,14 @@ import sys
 import json
 import glob
 import re
+import hashlib
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
 
 # Add shared module to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
-from settings import DEFAULT_EXCLUDED_DIRS, load_settings as shared_load_settings, is_excluded_path
+from settings import DEFAULT_EXCLUDED_DIRS, load_settings as shared_load_settings, is_excluded_path, file_lock
 
 # MCP SDK imports
 try:
@@ -32,6 +33,54 @@ except ImportError:
 server = Server("local-memory")
 
 # DEFAULT_EXCLUDED_DIRS imported from shared.settings
+
+# ============================================================
+# Pre-compiled regex patterns (module-level for performance)
+# ============================================================
+
+# Python patterns
+_CLASS_PY = re.compile(r'^class\s+(\w+)', re.MULTILINE)
+_DEF_PY = re.compile(r'^def\s+(\w+)', re.MULTILINE)
+_DOCSTRING_PY = re.compile(r'^(?:\s*#[^\n]*\n)*\s*(?:\'\'\'|""")(.*?)(?:\'\'\'|""")', re.DOTALL)
+_COMMENT_PY = re.compile(r'^\s*#(?!!)(.*)$', re.MULTILINE)
+_CONSTANTS_PY = re.compile(r'^([A-Z][A-Z_0-9]{2,})\s*=', re.MULTILINE)
+
+# TypeScript/JavaScript patterns
+_CLASS_TS = re.compile(r'(?:export\s+)?class\s+(\w+)')
+_FUNC_TS = re.compile(r'(?:export\s+)?(?:async\s+)?function\s+(\w+)')
+_ARROW_TS = re.compile(r'export\s+(?:const|let)\s+(\w+)\s*=')
+_JSDOC_TS = re.compile(r'/\*\*?\s*(.*?)(?:\*/)', re.DOTALL)
+_EXPORTED_TYPES_TS = re.compile(r'export\s+(?:type|interface)\s+(\w+)')
+_DECORATORS_TS = re.compile(r'@(\w+)\s*\(')
+_CONSTANTS_TS = re.compile(r'(?:export\s+)?const\s+([A-Z][A-Z_0-9]{2,})\s*=')
+
+# C#/Java/Go patterns
+_CLASS_CS = re.compile(r'(?:public|internal|static)\s+(?:partial\s+)?class\s+(\w+)')
+_FUNC_CS = re.compile(r'(?:public|private|protected|internal|static)\s+\w+\s+(\w+)\s*\(')
+_DECORATORS_CS = re.compile(r'\[(\w+)(?:\(|\])')
+_CLASS_JAVA = re.compile(r'(?:public|private|protected)\s+(?:abstract\s+)?class\s+(\w+)')
+_FUNC_JAVA = re.compile(r'(?:public|private|protected)\s+\w+\s+(\w+)\s*\(')
+_FUNC_GO = re.compile(r'^func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)', re.MULTILINE)
+
+# Block comment pattern (C-style languages)
+_BLOCK_COMMENT = re.compile(r'/\*\*?\s*(.*?)(?:\*/)', re.DOTALL)
+
+# File-type specific patterns
+_YAML_KEYS = re.compile(r'^(\w[\w-]*):', re.MULTILINE)
+_MD_HEADINGS = re.compile(r'^#{1,3}\s+(.+)', re.MULTILINE)
+_BARREL_EXPORTS = re.compile(r"export\s+(?:\*|\{[^}]+\})\s+from\s+['\"]([^'\"]+)['\"]")
+_DESCRIBE_BLOCKS = re.compile(r"describe\s*\(\s*['\"]([^'\"]+)['\"]")
+_TEST_CLASSES_PY = re.compile(r'^class\s+(Test\w+)', re.MULTILINE)
+_CSS_SELECTORS = re.compile(r'\.[\w-]+')
+_OVERVIEW_ARTIFACTS = re.compile(r'(?:Defines?|defining)\s+(\w+)')
+
+# Import patterns
+_IMPORT_TS = re.compile(r'import\s+.*\s+from\s+[\'"]([^\'"]+)[\'"]')
+_IMPORT_PY = re.compile(r'(?:from\s+(\S+)\s+import|import\s+(\S+))')
+
+# Smart merge patterns
+_OPEN_MARKER_RE = re.compile(r'<!-- AUTO-GENERATED\b[^>]*-->')
+_CLOSE_MARKER_RE = re.compile(r'<!-- END AUTO-GENERATED CONTENT -->')
 
 
 def read_settings(project_root: str) -> Dict:
@@ -71,6 +120,91 @@ def detect_language(files: List[str]) -> str:
     return ext_map.get(most_common_ext, most_common_ext[1:])
 
 
+def _summarize_by_filetype(file_path: str, content: str, lines: List[str]) -> Optional[str]:
+    """Handle non-code files that generic class/function extraction misses.
+
+    Returns a summary string if the file type is recognized, None otherwise.
+    """
+    file_name = os.path.basename(file_path)
+    stem = Path(file_path).stem
+    ext = Path(file_path).suffix.lower()
+
+    # JSON/YAML config: extract top-level keys
+    if ext in ('.json', '.yaml', '.yml'):
+        if ext == '.json':
+            try:
+                data = json.loads(content)
+                if isinstance(data, dict):
+                    keys = list(data.keys())[:8]
+                    return f"JSON config with keys: {', '.join(keys)}."
+            except (json.JSONDecodeError, ValueError):
+                pass
+        else:
+            # YAML: extract top-level keys via regex
+            yaml_keys = _YAML_KEYS.findall(content)
+            if yaml_keys:
+                keys = yaml_keys[:8]
+                return f"YAML config with keys: {', '.join(keys)}."
+
+    # Markdown: extract title + first headings
+    if ext in ('.md', '.mdx'):
+        headings = _MD_HEADINGS.findall(content)
+        if headings:
+            title = headings[0]
+            sub = headings[1:4]
+            if sub:
+                return f"{title}. Sections: {', '.join(sub)}."
+            return f"{title}."
+        return f"Markdown document."
+
+    # Barrel/index files: list re-exports
+    if stem == 'index' and ext in ('.ts', '.js', '.tsx', '.jsx'):
+        exports = _BARREL_EXPORTS.findall(content)
+        if exports:
+            return f"Barrel file re-exporting from {', '.join(exports[:6])}."
+
+    # Test files: extract describe/test suite names
+    if '.test.' in file_name or '.spec.' in file_name or file_name.startswith('test_'):
+        describes = _DESCRIBE_BLOCKS.findall(content)
+        if describes:
+            return f"Tests for {', '.join(describes[:4])}."
+        # Python test classes
+        test_classes = _TEST_CLASSES_PY.findall(content)
+        if test_classes:
+            return f"Tests: {', '.join(test_classes[:4])}."
+        return f"Test file for {stem.replace('.test', '').replace('.spec', '').replace('test_', '')}."
+
+    # CSS/SCSS: count class selectors
+    if ext in ('.css', '.scss', '.less'):
+        selectors = _CSS_SELECTORS.findall(content)
+        unique = list(dict.fromkeys(selectors))[:6]
+        if unique:
+            return f"Stylesheet with {len(set(selectors))} class selectors including {', '.join(unique)}."
+        return f"Stylesheet."
+
+    return None
+
+
+def _decorator_to_role(decorators: List[str]) -> str:
+    """Map decorator names to human-readable role prefixes."""
+    role_map = {
+        'Component': 'Angular component',
+        'Injectable': 'Angular service',
+        'Directive': 'Angular directive',
+        'Pipe': 'Angular pipe',
+        'NgModule': 'Angular module',
+        'Controller': 'NestJS controller',
+        'Module': 'NestJS module',
+        'Entity': 'TypeORM entity',
+        'Table': 'Sequelize model',
+        'ApiTags': 'API endpoint',
+    }
+    for dec in decorators:
+        if dec in role_map:
+            return role_map[dec]
+    return ""
+
+
 def summarize_file(file_path: str, language: str) -> str:
     """Read first ~80 lines of a file and generate a 1-2 sentence summary.
 
@@ -98,7 +232,7 @@ def summarize_file(file_path: str, language: str) -> str:
 
     if language == 'python':
         # Python: triple-quote docstring at top of file
-        m = re.search(r'^(?:\s*#[^\n]*\n)*\s*(?:\'\'\'|""")(.*?)(?:\'\'\'|""")', content, re.DOTALL)
+        m = _DOCSTRING_PY.search(content)
         if m:
             docstring = m.group(1).strip().split('\n')[0]  # first line only
         else:
@@ -115,7 +249,7 @@ def summarize_file(file_path: str, language: str) -> str:
 
     elif language in ['typescript', 'javascript']:
         # JSDoc or block comment at top
-        m = re.search(r'/\*\*?\s*(.*?)(?:\*/)', content, re.DOTALL)
+        m = _JSDOC_TS.search(content)
         if m:
             raw = m.group(1)
             # Clean JSDoc: remove leading * and @tags
@@ -142,7 +276,7 @@ def summarize_file(file_path: str, language: str) -> str:
 
     elif language in ['csharp', 'java', 'go']:
         # Block or line comments
-        m = re.search(r'/\*\*?\s*(.*?)(?:\*/)', content, re.DOTALL)
+        m = _BLOCK_COMMENT.search(content)
         if m:
             raw = m.group(1)
             cleaned = []
@@ -155,61 +289,102 @@ def summarize_file(file_path: str, language: str) -> str:
             if cleaned:
                 docstring = cleaned[0]
 
+    # --- Check filetype-specific handler first ---
+    filetype_summary = _summarize_by_filetype(file_path, content, lines)
+    if filetype_summary:
+        return filetype_summary[:200]
+
     # --- Extract class and function names ---
     classes = []
     functions = []
 
     if language == 'python':
-        classes = re.findall(r'^class\s+(\w+)', content, re.MULTILINE)
-        functions = re.findall(r'^def\s+(\w+)', content, re.MULTILINE)
+        classes = _CLASS_PY.findall(content)
+        functions = _DEF_PY.findall(content)
         # Filter out dunder/private
         functions = [f for f in functions if not f.startswith('_')]
 
     elif language in ['typescript', 'javascript']:
-        classes = re.findall(r'(?:export\s+)?class\s+(\w+)', content)
+        classes = _CLASS_TS.findall(content)
         # Named exports, arrow functions, regular functions
-        functions = re.findall(r'(?:export\s+)?(?:async\s+)?function\s+(\w+)', content)
-        arrow_fns = re.findall(r'export\s+(?:const|let)\s+(\w+)\s*=', content)
+        functions = _FUNC_TS.findall(content)
+        arrow_fns = _ARROW_TS.findall(content)
         functions.extend(arrow_fns)
 
     elif language == 'csharp':
-        classes = re.findall(r'(?:public|internal|static)\s+(?:partial\s+)?class\s+(\w+)', content)
-        functions = re.findall(r'(?:public|private|protected|internal|static)\s+\w+\s+(\w+)\s*\(', content)
+        classes = _CLASS_CS.findall(content)
+        functions = _FUNC_CS.findall(content)
 
     elif language == 'go':
-        functions = re.findall(r'^func\s+(?:\(\w+\s+\*?\w+\)\s+)?(\w+)', content, re.MULTILINE)
+        functions = _FUNC_GO.findall(content)
 
     elif language == 'java':
-        classes = re.findall(r'(?:public|private|protected)\s+(?:abstract\s+)?class\s+(\w+)', content)
-        functions = re.findall(r'(?:public|private|protected)\s+\w+\s+(\w+)\s*\(', content)
+        classes = _CLASS_JAVA.findall(content)
+        functions = _FUNC_JAVA.findall(content)
+
+    # --- Extract additional symbols (TS/JS specific) ---
+    exported_types = []
+    decorators = []
+    constants = []
+
+    if language in ['typescript', 'javascript']:
+        exported_types = _EXPORTED_TYPES_TS.findall(content)
+        decorators = _DECORATORS_TS.findall(content)
+        constants = _CONSTANTS_TS.findall(content)
+    elif language == 'python':
+        constants = _CONSTANTS_PY.findall(content)
+    elif language == 'csharp':
+        decorators = _DECORATORS_CS.findall(content)
 
     # --- Build summary ---
+    # 1. Use docstring if found
     if docstring:
-        return docstring
+        return docstring[:200]
 
-    # Infer from definitions
+    # 2. Build from extracted symbols
     parts = []
+
+    # Decorator-based role prefix
+    role = _decorator_to_role(decorators) if decorators else ""
+
     if classes:
-        parts.append(f"Defines {', '.join(classes[:3])}")
+        cls_str = ', '.join(classes[:3])
         if len(classes) > 3:
-            parts[-1] += f" and {len(classes) - 3} more classes"
-    if functions:
-        top_fns = functions[:4]
-        if classes:
-            parts.append(f"with functions {', '.join(top_fns)}")
+            cls_str += f" (+{len(classes) - 3} more)"
+        if role:
+            parts.append(f"{role} defining {cls_str}")
         else:
-            parts.append(f"Defines {', '.join(top_fns)}")
-            if len(functions) > 4:
-                parts[-1] += f" and {len(functions) - 4} more functions"
+            parts.append(f"Defines {cls_str}")
+
+    if functions:
+        top_fns = ', '.join(f"{fn}()" for fn in functions[:4])
+        if len(functions) > 4:
+            top_fns += f" (+{len(functions) - 4} more)"
+        if classes:
+            parts.append(f"with {top_fns}")
+        else:
+            if role:
+                parts.append(f"{role} with {top_fns}")
+            else:
+                parts.append(f"Defines {top_fns}")
+
+    if exported_types:
+        type_str = ', '.join(exported_types[:4])
+        parts.append(f"Exports types {type_str}")
+
+    if constants and not classes:
+        const_str = ', '.join(constants[:4])
+        parts.append(f"Constants: {const_str}")
 
     if parts:
-        # Infer purpose from filename
-        purpose = stem.replace('-', ' ').replace('_', ' ')
-        return ' '.join(parts) + f". Handles {purpose} logic."
+        summary = '. '.join(parts) + '.'
+        return summary[:200]
 
-    # Last resort: name-based
-    purpose = stem.replace('-', ' ').replace('_', ' ')
-    return f"Handles {purpose} logic."
+    # 3. Last resort: language + source file (no "Handles X logic")
+    lang_label = language.capitalize() if language != 'unknown' else ''
+    if lang_label:
+        return f"{lang_label} source file."
+    return "Source file."
 
 
 def analyze_imports(file_path: str, language: str) -> Dict:
@@ -221,9 +396,7 @@ def analyze_imports(file_path: str, language: str) -> Dict:
             content = f.read()
 
         if language in ['typescript', 'javascript']:
-            # Find import statements
-            import_pattern = r'import\s+.*\s+from\s+[\'"]([^\'"]+)[\'"]'
-            for match in re.finditer(import_pattern, content):
+            for match in _IMPORT_TS.finditer(content):
                 module = match.group(1)
                 if module.startswith('.'):
                     imports["internal"].append(module)
@@ -231,9 +404,7 @@ def analyze_imports(file_path: str, language: str) -> Dict:
                     imports["external"].append(module)
 
         elif language == 'python':
-            # Find import statements
-            import_pattern = r'(?:from\s+(\S+)\s+import|import\s+(\S+))'
-            for match in re.finditer(import_pattern, content):
+            for match in _IMPORT_PY.finditer(content):
                 module = match.group(1) or match.group(2)
                 if module.startswith('.'):
                     imports["internal"].append(module)
@@ -244,6 +415,219 @@ def analyze_imports(file_path: str, language: str) -> Dict:
         print(f"Warning: Error analyzing {file_path}: {e}", file=sys.stderr)
 
     return imports
+
+
+def _detect_patterns(files: List[str]) -> List[str]:
+    """Detect architectural patterns from filenames. Expands on basic pattern detection."""
+    patterns = []
+    lower_files = [f.lower() for f in files]
+    basenames = [os.path.basename(f) for f in lower_files]
+
+    checks = [
+        (lambda: any(f.endswith(('.test.ts', '.spec.ts', '.test.js', '.spec.js', '.test.py')) or f.startswith('test_') for f in lower_files),
+         "Contains test files"),
+        (lambda: any(f.startswith('index.') for f in basenames),
+         "Has barrel/index file (module entry point)"),
+        (lambda: any('controller' in f for f in lower_files),
+         "Contains controller classes"),
+        (lambda: any('service' in f and 'service-worker' not in f for f in lower_files),
+         "Contains service classes"),
+        (lambda: any(x in f for f in lower_files for x in ('repository', 'repo.', 'dao.')),
+         "Contains repository/DAO layer"),
+        (lambda: any('factory' in f for f in lower_files),
+         "Uses factory pattern"),
+        (lambda: any('middleware' in f for f in lower_files),
+         "Contains middleware"),
+        (lambda: any(x in f for f in lower_files for x in ('model.', 'entity.', '.entity.', '.model.')),
+         "Contains model/entity definitions"),
+        (lambda: any('.component.' in f for f in lower_files),
+         "Contains UI components"),
+        (lambda: any(re.match(r'use[A-Z]', os.path.basename(f)) for f in files if f.lower().endswith(('.ts', '.js', '.tsx'))),
+         "Contains React hooks"),
+        (lambda: any('.guard.' in f for f in lower_files),
+         "Contains guard classes"),
+        (lambda: any('.pipe.' in f for f in lower_files),
+         "Contains pipe transforms"),
+        (lambda: any('.directive.' in f for f in lower_files),
+         "Contains directives"),
+        (lambda: any('enum' in f for f in lower_files),
+         "Contains enum definitions"),
+        (lambda: any(x in f for f in lower_files for x in ('constants', 'config.')),
+         "Contains constants/configuration"),
+        (lambda: any(x in f for f in lower_files for x in ('types.', 'interfaces.', '.d.ts')),
+         "Contains type/interface definitions"),
+        (lambda: any('migration' in f for f in lower_files),
+         "Contains database migrations"),
+        (lambda: any(x in f for f in lower_files for x in ('util', 'helper', 'helpers')),
+         "Contains utility/helper functions"),
+    ]
+
+    for check_fn, label in checks:
+        if check_fn():
+            patterns.append(label)
+
+    return patterns
+
+
+def _detect_directory_role(file_summaries: Dict[str, str], files: List[str], dir_name: str) -> str:
+    """Infer directory role from aggregated file summaries and filenames."""
+    all_summaries = ' '.join(file_summaries.values()).lower()
+    all_files = ' '.join(f.lower() for f in files)
+
+    role_signals = [
+        ('controller', 'API controller layer'),
+        ('service', 'Service layer'),
+        ('component', 'UI component module'),
+        ('repository', 'Data access layer'),
+        ('middleware', 'Middleware layer'),
+        ('guard', 'Guard/authorization layer'),
+        ('pipe', 'Transform/pipe module'),
+        ('directive', 'Directive module'),
+        ('entity', 'Entity/model definitions'),
+        ('migration', 'Database migration module'),
+        ('util', 'Utility module'),
+    ]
+
+    for signal, role in role_signals:
+        if signal in all_files or signal in all_summaries:
+            return role
+
+    return ""
+
+
+def _compose_overview(dir_name: str, file_summaries: Dict[str, str], files: List[str],
+                      patterns: List[str], language: str, total_files: int) -> str:
+    """Generate content-aware overview from file summaries and patterns."""
+    role = _detect_directory_role(file_summaries, files, dir_name)
+
+    # Extract key artifact names from summaries
+    artifacts = []
+    for summary in file_summaries.values():
+        # Pull class/component names from "Defines X" or "Angular component defining X"
+        m = _OVERVIEW_ARTIFACTS.findall(summary)
+        artifacts.extend(m)
+    # Deduplicate preserving order
+    seen = set()
+    unique_artifacts = []
+    for a in artifacts:
+        if a not in seen and a not in ('type', 'interface', 'const'):
+            seen.add(a)
+            unique_artifacts.append(a)
+
+    parts = []
+    if role:
+        purpose = dir_name.replace('-', ' ').replace('_', ' ')
+        parts.append(f"{role} for {purpose}")
+    elif unique_artifacts:
+        parts.append(f"Contains {', '.join(unique_artifacts[:4])}")
+        if len(unique_artifacts) > 4:
+            parts[-1] += f" and {len(unique_artifacts) - 4} more"
+    else:
+        purpose = dir_name.replace('-', ' ').replace('_', ' ')
+        parts.append(f"Module for {purpose}")
+
+    parts.append(f"{total_files} files ({language})")
+
+    return '. '.join(parts) + '.'
+
+
+def _score_quality(file_summaries: Dict[str, str], overview: str,
+                   patterns: List[str], total_files: int) -> Dict:
+    """Score generated content quality (0-100).
+
+    Returns dict with score, grade, and issues list.
+    """
+    issues = []
+
+    # File summary specificity: 0-40 pts
+    generic_phrases = ['source file.', 'stylesheet.', 'markdown document.']
+    non_empty = [s for s in file_summaries.values() if s]
+    if non_empty:
+        generic_count = sum(1 for s in non_empty if any(g in s.lower() for g in generic_phrases))
+        specific_ratio = 1 - (generic_count / len(non_empty))
+        summary_score = int(specific_ratio * 40)
+        if specific_ratio < 0.5:
+            issues.append(f"{generic_count}/{len(non_empty)} summaries are generic")
+    else:
+        summary_score = 0
+        issues.append("No file summaries generated")
+
+    # Overview specificity: 0-30 pts
+    overview_lower = overview.lower()
+    overview_score = 30
+    if 'module for' in overview_lower and not any(x in overview_lower for x in ['contains', 'layer', 'definitions']):
+        overview_score = 10
+        issues.append("Overview lacks specific artifacts")
+    elif any(x in overview_lower for x in ['layer', 'definitions', 'contains']):
+        overview_score = 25
+
+    # Pattern coverage: 0-15 pts
+    pattern_score = min(len(patterns) * 3, 15)
+    if not patterns:
+        issues.append("No patterns detected")
+
+    # Completeness: 0-15 pts
+    analyzed = len(file_summaries)
+    if total_files > 0:
+        coverage = analyzed / total_files
+        completeness_score = int(coverage * 15)
+        if coverage < 0.5:
+            issues.append(f"Only {analyzed}/{total_files} files analyzed")
+    else:
+        completeness_score = 15
+
+    total = summary_score + overview_score + pattern_score + completeness_score
+
+    if total >= 90:
+        grade = 'A'
+    elif total >= 75:
+        grade = 'B'
+    elif total >= 60:
+        grade = 'C'
+    elif total >= 40:
+        grade = 'D'
+    else:
+        grade = 'F'
+
+    return {"score": total, "grade": grade, "issues": issues}
+
+
+# ============================================================
+# Summary caching for incremental generation
+# ============================================================
+
+def _get_cache_path(directory: str, project_root: str) -> str:
+    """Get the cache file path for a directory."""
+    cache_hash = hashlib.md5(directory.encode()).hexdigest()[:12]
+    return os.path.join(project_root, '.claude', f'local-memory-cache-{cache_hash}.json')
+
+
+def _load_summary_cache(directory: str, project_root: str) -> dict:
+    """Load summary cache for a directory."""
+    cache_path = _get_cache_path(directory, project_root)
+    if not os.path.exists(cache_path):
+        return {"directory": directory, "summaries": {}}
+
+    try:
+        with open(cache_path, 'r', encoding='utf-8') as f:
+            cache = json.load(f)
+            if cache.get("directory") != directory:
+                return {"directory": directory, "summaries": {}}
+            return cache
+    except Exception:
+        return {"directory": directory, "summaries": {}}
+
+
+def _save_summary_cache(directory: str, project_root: str, cache: dict):
+    """Save summary cache for a directory with file locking."""
+    cache_path = _get_cache_path(directory, project_root)
+    try:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        with file_lock(cache_path):
+            with open(cache_path, 'w', encoding='utf-8') as f:
+                json.dump(cache, f, indent=2)
+    except Exception:
+        pass
 
 
 @server.list_tools()
@@ -418,15 +802,7 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
                 import_analysis[file_name] = imports
 
         # Detect patterns
-        patterns = []
-        if any(f.endswith('.test.ts') or f.endswith('.spec.ts') for f in files):
-            patterns.append("Contains test files")
-        if 'index.ts' in files or 'index.js' in files:
-            patterns.append("Has index file (module entry point)")
-        if any('Controller' in f for f in files):
-            patterns.append("Contains controller classes")
-        if any('Service' in f for f in files):
-            patterns.append("Contains service classes")
+        patterns = _detect_patterns(files)
 
         result = {
             "directory": os.path.relpath(directory, project_root),
@@ -468,35 +844,69 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
 
         language = analysis.get("language", "unknown")
 
-        # Generate file summaries
+        # Load summary cache for incremental processing
+        cache = _load_summary_cache(directory, project_root)
+        cached_summaries = cache.get("summaries", {})
+        cache_hits = 0
+        cache_misses = 0
+
+        # Generate file summaries (with caching)
         file_summaries = {}
         for file_name in analysis["files"]:
             file_path = os.path.join(abs_directory, file_name)
+
+            # Check cache: compare mtime + size
+            cached_entry = cached_summaries.get(file_name)
+            if cached_entry:
+                try:
+                    stat = os.stat(file_path)
+                    if (abs(stat.st_mtime - cached_entry.get("mtime", 0)) < 0.01 and
+                            stat.st_size == cached_entry.get("size", -1)):
+                        file_summaries[file_name] = cached_entry.get("summary", "")
+                        cache_hits += 1
+                        continue
+                except OSError:
+                    pass
+
+            # Cache miss: generate summary
             summary = summarize_file(file_path, language)
             file_summaries[file_name] = summary
+            cache_misses += 1
 
-        # Infer module overview from file names and patterns
+            # Update cache entry
+            try:
+                stat = os.stat(file_path)
+                cached_summaries[file_name] = {
+                    "mtime": stat.st_mtime,
+                    "size": stat.st_size,
+                    "summary": summary
+                }
+            except OSError:
+                pass
+
+        # Save updated cache
+        cache["summaries"] = cached_summaries
+        _save_summary_cache(directory, project_root, cache)
+
+        # Generate content-aware overview
         dir_name = os.path.basename(directory.rstrip('/\\'))
         patterns = analysis.get("patterns", [])
-        non_empty_summaries = [s for s in file_summaries.values() if s]
 
-        overview_parts = []
-        if any('controller' in p.lower() for p in patterns):
-            overview_parts.append(f"Contains API controllers for {dir_name} domain")
-        elif any('service' in p.lower() for p in patterns):
-            overview_parts.append(f"Provides services for {dir_name} functionality")
-        elif any('index' in p.lower() for p in patterns):
-            overview_parts.append(f"Module entry point for {dir_name}")
+        overview = _compose_overview(
+            dir_name, file_summaries, analysis["files"],
+            patterns, language, analysis["totalFiles"]
+        )
 
-        if not overview_parts:
-            purpose = dir_name.replace('-', ' ').replace('_', ' ')
-            overview_parts.append(f"Handles {purpose} functionality")
-
-        overview_parts.append(f"Contains {analysis['totalFiles']} files ({language})")
-        overview = ". ".join(overview_parts) + "."
+        # Quality scoring
+        quality = _score_quality(file_summaries, overview, patterns, analysis["totalFiles"])
+        quality_comment = f"<!-- Quality: {quality['score']}/100 ({quality['grade']})"
+        if quality["issues"]:
+            quality_comment += f" | Issues: {'; '.join(quality['issues'])}"
+        quality_comment += " -->"
 
         content = f"""<!-- AUTO-GENERATED by local-memory plugin on {datetime.now().strftime('%Y-%m-%d')} -->
 <!-- To preserve custom content, add sections outside auto-gen blocks -->
+{quality_comment}
 
 # Module: {dir_name}
 
@@ -548,6 +958,11 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
                     content += f"- `{imp}`\n"
                 content += "\n"
 
+        # Line count warning
+        line_count = content.count('\n') + 1
+        if line_count > 400:
+            content += f"\n<!-- WARNING: {line_count} lines exceeds 400-line guideline. Consider splitting into sub-modules. -->\n"
+
         content += "<!-- END AUTO-GENERATED CONTENT -->\n"
 
         return [TextContent(type="text", text=content)]
@@ -598,9 +1013,9 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
                 with open(claude_md_path, 'r', encoding='utf-8') as f:
                     existing = f.read()
 
-                # Use regex to find all opening and closing markers
-                open_markers = list(re.finditer(r'<!-- AUTO-GENERATED\b[^>]*-->', existing))
-                close_markers = list(re.finditer(r'<!-- END AUTO-GENERATED CONTENT -->', existing))
+                # Use pre-compiled regex to find all opening and closing markers
+                open_markers = list(_OPEN_MARKER_RE.finditer(existing))
+                close_markers = list(_CLOSE_MARKER_RE.finditer(existing))
 
                 if len(open_markers) > 1 or len(close_markers) > 1:
                     print(f"Warning: Multiple auto-gen marker pairs found in {claude_md_path} "
@@ -649,11 +1064,12 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
                 print(f"Warning: Smart merge failed: {e}", file=sys.stderr)
                 warnings.append(f"Smart merge failed: {e}")
 
-        # Write file
+        # Write file with file locking for concurrent safety
         existed = os.path.exists(claude_md_path)
         try:
-            with open(claude_md_path, 'w', encoding='utf-8') as f:
-                f.write(content)
+            with file_lock(claude_md_path):
+                with open(claude_md_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
 
             result = {
                 "success": True,
@@ -717,7 +1133,7 @@ async def main():
             write_stream,
             InitializationOptions(
                 server_name="local-memory",
-                server_version="0.2.4",
+                server_version="0.3.1",
                 capabilities=server.get_capabilities(
                     notification_options=NotificationOptions(),
                     experimental_capabilities={}

@@ -7,17 +7,17 @@ Only triggers when coding session appears complete (not during active developmen
 
 Decision Logic:
 1. Load settings from .claude/local-memory.local.md
-2. If autoGenerate is false → Allow stop
+2. If autoGenerate is false -> Allow stop
 3. Check for session completion signals (git commit, tests pass, etc.)
-4. If session not complete → Allow stop (don't interrupt active coding)
+4. If session not complete -> Allow stop (don't interrupt active coding)
 5. Load session state (last processed line, already suggested directories)
 6. Parse transcript for NEW Edit/Write/NotebookEdit operations (since last run)
 7. Group files by directory, exclude specified directories
 8. Skip directories already suggested in this session
 9. Skip directories with recently-updated CLAUDE.md (within cooldown period)
-10. If any directory has >= threshold files → Block and suggest MCP tools
+10. If any directory has >= threshold files -> Block and suggest MCP tools
 11. Save session state (processed line, suggested directories)
-12. Otherwise → Allow stop
+12. Otherwise -> Allow stop
 
 Debug Mode:
 - Set debug: true in .claude/local-memory.local.md, OR
@@ -37,12 +37,56 @@ from datetime import datetime
 
 # Add shared module to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
-from settings import DEFAULT_EXCLUDED_DIRS, load_settings as _shared_load_settings
+from settings import DEFAULT_EXCLUDED_DIRS, load_settings as _shared_load_settings, file_lock
 
 
 # Global debug state
 DEBUG_ENABLED = False
 DEBUG_LOG_PATH = None
+
+
+# ============================================================
+# Pre-compiled regex patterns (module-level for performance)
+# ============================================================
+
+# Completion signal categories
+_GIT_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
+    r'git\s+(commit|push)',
+]]
+
+_TEST_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
+    r'pass(ed|ing)?.*0\s+fail',
+    r'0\s+failing',
+    r'All\s+\d+\s+tests?\s+passed',
+    r'OK\s+\(\d+',
+    r'Passed!.*Failed[:\s]+0',
+    r'Failed[:\s]+0',
+]]
+
+_BUILD_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
+    r'Build\s+succeeded',
+    r'0\s+Error\(s\)',
+    r'Successfully\s+compiled',
+    r'Compiled\s+successfully',
+    r'nx\s+run.*succeeded',
+]]
+
+_TASK_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
+    r'TaskUpdate.*completed',
+]]
+
+_COMPLETION_PHRASE_PATTERNS = [re.compile(p, re.IGNORECASE) for p in [
+    r'"role":\s*"assistant".*\b(committed|pushed|done|complete|finished|ready to commit|looks good|that.s all|tests pass|build succeeded)\b',
+    r'"role":\s*"assistant".*\b(all good|all set|here.s the summary|that.s it|wrap.?up|changes are ready|refactored|summary of changes)\b',
+]]
+
+_ACTIVE_CODING_PATTERNS = [re.compile(p) for p in [
+    r'"name":\s*"(Edit|Write|NotebookEdit)"',
+]]
+
+# Tool use detection for file path extraction (cheap string check first)
+_TOOL_USE_MARKER = '"tool_use"'
+_TARGET_TOOLS = {'Edit', 'Write', 'NotebookEdit'}
 
 
 def get_session_state_path(cwd: str, transcript_path: str) -> str:
@@ -94,12 +138,13 @@ def load_session_state(state_path: str) -> dict:
 
 
 def save_session_state(state_path: str, state: dict):
-    """Save session state to file."""
+    """Save session state to file with file locking."""
     try:
         os.makedirs(os.path.dirname(state_path), exist_ok=True)
         state['last_run_time'] = datetime.now().isoformat()
-        with open(state_path, 'w', encoding='utf-8') as f:
-            json.dump(state, f, indent=2)
+        with file_lock(state_path):
+            with open(state_path, 'w', encoding='utf-8') as f:
+                json.dump(state, f, indent=2)
     except Exception as e:
         debug_log(f"Failed to save session state: {e}")
 
@@ -140,187 +185,238 @@ def init_debug(cwd: str, settings: dict):
 # Default settings (from shared module, kept as local references)
 # DEFAULT_EXCLUDED_DIRS imported from shared.settings
 
-# Completion signal patterns (detected in transcript)
-COMPLETION_SIGNALS = [
-    # Git operations indicate work is done
-    r'"name":\s*"Bash".*"command":\s*"[^"]*git\s+(commit|push)',
-
-    # Test success patterns (0 errors/failures in output)
-    r'(\d+)\s+pass(ed|ing)?,?\s+0\s+fail',           # "5 passed, 0 failed"
-    r'Tests:\s+\d+\s+passed,\s+0\s+failed',          # Jest: "Tests: 5 passed, 0 failed"
-    r'0\s+failing',                                   # Mocha: "0 failing"
-    r'passed.*0\s+errors?',                          # Generic: "passed, 0 errors"
-    r'All\s+\d+\s+tests?\s+passed',                  # "All 5 tests passed"
-    r'OK\s+\(\d+\s+tests?\)',                        # pytest: "OK (5 tests)"
-    r'Passed!.*Failed[:\s]+0',                        # dotnet: "Passed! - Failed: 0"
-    r'Failed[:\s]+0',                                 # Generic: "Failed: 0"
-
-    # Build success patterns (0 errors in output)
-    r'Build\s+succeeded',                            # dotnet/MSBuild
-    r'0\s+Error\(s\)',                               # MSBuild: "0 Error(s)"
-    r'Successfully\s+compiled',                      # Generic
-    r'Compiled\s+successfully',                      # TypeScript/Webpack
-    r'Build\s+complete.*0\s+errors?',                # Generic
-    r'nx\s+run.*succeeded',                          # Nx: "nx run project:build succeeded"
-
-    # Task completion
-    r'"name":\s*"TaskUpdate".*"status":\s*"completed"',
-
-    # Explicit completion phrases in assistant messages
-    r'"role":\s*"assistant".*\b(committed|pushed|done|complete|finished|ready to commit|looks good|that.s all|tests pass|build succeeded)\b',
-    r'"role":\s*"assistant".*\b(all good|all set|here.s the summary|that.s it|wrap.?up|changes are ready|refactored|summary of changes)\b',
-]
-
-# Active coding signals (should NOT trigger during these)
-ACTIVE_CODING_SIGNALS = [
-    # Recent Edit/Write operations (within last few entries)
-    r'"name":\s*"(Edit|Write|NotebookEdit)"',
-]
-
 
 def load_settings(cwd: str) -> dict:
     """Load settings from shared module (single source of truth)."""
     return _shared_load_settings(cwd)
 
 
-def check_session_completion(transcript_path: str, cached: dict = None) -> dict:
-    """
-    Analyze transcript to detect if coding session appears complete.
-    Uses cached completion signals to avoid re-scanning the entire transcript.
+def cleanup_stale_files(cwd: str, max_age_days: int = 7):
+    """Remove session state and cache files older than max_age_days."""
+    claude_dir = os.path.join(cwd, '.claude')
+    if not os.path.isdir(claude_dir):
+        return
+
+    now = time.time()
+    max_age_secs = max_age_days * 86400
+
+    try:
+        for entry in os.scandir(claude_dir):
+            if not entry.is_file():
+                continue
+            # Clean up stale state files and cache files
+            if (entry.name.startswith('local-memory-state-') or
+                    entry.name.startswith('local-memory-cache-')) and entry.name.endswith('.json'):
+                try:
+                    if now - entry.stat().st_mtime > max_age_secs:
+                        os.remove(entry.path)
+                        debug_log(f"Cleaned up stale file: {entry.name}")
+                except OSError:
+                    pass
+    except OSError:
+        pass
+
+
+def scan_transcript(transcript_path: str, cwd: str, start_line: int = 0,
+                    cached: dict = None) -> dict:
+    """Single-pass transcript scan. Returns both completion signals and file paths.
+
+    Merges the previously separate check_session_completion() and
+    extract_file_paths_from_transcript() into one pass over the file.
 
     Args:
         transcript_path: Path to the JSONL transcript file
-        cached: Previous completion_cache from session state. If provided,
-                only new lines (after last_scanned_line) are scanned.
+        cwd: Current working directory
+        start_line: Line number to start from for file extraction (0-indexed)
+        cached: Previous completion_cache from session state
 
     Returns dict with:
-    - is_complete: bool - True if session appears done
-    - reason: str - Why we think session is/isn't complete
-    - last_edit_index: int - Index of last Edit/Write operation
-    - total_entries: int - Total transcript entries
-    - completion_cache: dict - Updated cache to store in session state
+    - completion: dict with is_complete, reason, signals
+    - file_paths: list of relative file paths from Edit/Write/NotebookEdit
+    - last_line: int - last line number processed (for next run)
+    - completion_cache: dict - updated cache for session state
     """
-    result = {
-        'is_complete': False,
-        'reason': 'No completion signals detected',
-        'last_edit_index': -1,
-        'total_entries': 0,
-        'has_commit': False,
-        'has_test_success': False,
-        'has_build_success': False,
-        'has_task_complete': False,
-        'has_completion_phrase': False
-    }
+    # Initialize completion signals from cache
+    has_commit = False
+    has_test_success = False
+    has_build_success = False
+    has_task_complete = False
+    has_completion_phrase = False
+    last_edit_index = -1
+    completion_start_line = 0
 
-    # Initialize from cache if provided
-    start_line = 0
     if cached and isinstance(cached, dict) and cached.get('last_scanned_line', 0) > 0:
-        start_line = cached['last_scanned_line']
-        result['has_commit'] = cached.get('has_commit', False)
-        result['has_test_success'] = cached.get('has_test_success', False)
-        result['has_build_success'] = cached.get('has_build_success', False)
-        result['has_task_complete'] = cached.get('has_task_complete', False)
-        result['has_completion_phrase'] = cached.get('has_completion_phrase', False)
-        result['last_edit_index'] = cached.get('last_edit_index', -1)
+        completion_start_line = cached['last_scanned_line']
+        has_commit = cached.get('has_commit', False)
+        has_test_success = cached.get('has_test_success', False)
+        has_build_success = cached.get('has_build_success', False)
+        has_task_complete = cached.get('has_task_complete', False)
+        has_completion_phrase = cached.get('has_completion_phrase', False)
+        last_edit_index = cached.get('last_edit_index', -1)
 
-    # Signal categories for better reason reporting
-    git_patterns = [r'git\s+(commit|push)']
-    test_patterns = [r'pass(ed|ing)?.*0\s+fail', r'0\s+failing', r'All\s+\d+\s+tests?\s+passed', r'OK\s+\(\d+', r'Passed!.*Failed[:\s]+0', r'Failed[:\s]+0']
-    build_patterns = [r'Build\s+succeeded', r'0\s+Error\(s\)', r'Successfully\s+compiled', r'Compiled\s+successfully', r'nx\s+run.*succeeded']
-    task_patterns = [r'TaskUpdate.*completed']
+    # File extraction state
+    file_paths = []
+    seen_paths = set()
+    total_entries = 0
+    last_line = start_line
+
+    normalized_cwd = os.path.normpath(cwd)
 
     try:
         with open(transcript_path, 'r', encoding='utf-8') as f:
-            for i, line in enumerate(f):
-                # Always count total entries
-                result['total_entries'] = i + 1
+            for line_num, raw_line in enumerate(f):
+                total_entries = line_num + 1
 
-                # Skip already-scanned lines for signal detection
-                if i < start_line:
-                    continue
+                # Phase 1: Completion signal detection (from completion_start_line)
+                if line_num >= completion_start_line:
+                    for pat in _GIT_PATTERNS:
+                        if pat.search(raw_line):
+                            has_commit = True
+                            break
 
-                # Check for completion signals by category
-                for pattern in git_patterns:
-                    if re.search(pattern, line, re.IGNORECASE):
-                        result['has_commit'] = True
+                    for pat in _TEST_PATTERNS:
+                        if pat.search(raw_line):
+                            has_test_success = True
+                            break
 
-                for pattern in test_patterns:
-                    if re.search(pattern, line, re.IGNORECASE):
-                        result['has_test_success'] = True
+                    for pat in _BUILD_PATTERNS:
+                        if pat.search(raw_line):
+                            has_build_success = True
+                            break
 
-                for pattern in build_patterns:
-                    if re.search(pattern, line, re.IGNORECASE):
-                        result['has_build_success'] = True
+                    for pat in _TASK_PATTERNS:
+                        if pat.search(raw_line):
+                            has_task_complete = True
+                            break
 
-                for pattern in task_patterns:
-                    if re.search(pattern, line, re.IGNORECASE):
-                        result['has_task_complete'] = True
+                    for pat in _COMPLETION_PHRASE_PATTERNS:
+                        if pat.search(raw_line):
+                            has_completion_phrase = True
+                            break
 
-                # Check all COMPLETION_SIGNALS for general completion phrases
-                for pattern in COMPLETION_SIGNALS:
-                    if re.search(pattern, line, re.IGNORECASE):
-                        if '"role"' in pattern and '"assistant"' in pattern:
-                            result['has_completion_phrase'] = True
+                    # Track last Edit/Write operation
+                    for pat in _ACTIVE_CODING_PATTERNS:
+                        if pat.search(raw_line):
+                            last_edit_index = line_num
+                            break
 
-                # Track last Edit/Write operation
-                for pattern in ACTIVE_CODING_SIGNALS:
-                    if re.search(pattern, line):
-                        result['last_edit_index'] = i
+                # Phase 2: File path extraction (from start_line, only for tool_use lines)
+                if line_num >= start_line:
+                    last_line = line_num + 1
 
-        # Build updated cache for next run
-        result['completion_cache'] = {
-            'last_scanned_line': result['total_entries'],
-            'has_commit': result['has_commit'],
-            'has_test_success': result['has_test_success'],
-            'has_build_success': result['has_build_success'],
-            'has_task_complete': result['has_task_complete'],
-            'has_completion_phrase': result['has_completion_phrase'],
-            'last_edit_index': result['last_edit_index']
-        }
+                    if _TOOL_USE_MARKER in raw_line:
+                        try:
+                            entry = json.loads(raw_line.strip())
+                        except json.JSONDecodeError:
+                            continue
 
-        # Determine if session is complete
-        entries_since_last_edit = result['total_entries'] - result['last_edit_index']
+                        content = None
 
-        # Session is complete if:
-        # 1. Has git commit/push, OR
-        # 2. Has test success (0 failures) AND no edits in last 5 entries, OR
-        # 3. Has build success (0 errors) AND no edits in last 5 entries, OR
-        # 4. Has task marked complete AND no edits in last 5 entries, OR
-        # 5. Has completion phrase AND no edits in last 5 entries, OR
-        # 6. No edits in last 15 entries (long conversation gap)
-        if result['has_commit'] and entries_since_last_edit > 3:
-            result['is_complete'] = True
-            result['reason'] = 'Git commit/push detected with no recent edits'
-        elif result['has_test_success'] and entries_since_last_edit > 5:
-            result['is_complete'] = True
-            result['reason'] = 'Tests passed (0 failures) with no recent edits'
-        elif result['has_build_success'] and entries_since_last_edit > 5:
-            result['is_complete'] = True
-            result['reason'] = 'Build succeeded (0 errors) with no recent edits'
-        elif result['has_task_complete'] and entries_since_last_edit > 5:
-            result['is_complete'] = True
-            result['reason'] = 'Task marked complete with no recent edits'
-        elif result['has_completion_phrase'] and entries_since_last_edit > 5:
-            result['is_complete'] = True
-            result['reason'] = 'Completion phrase detected with no recent edits'
-        elif result['last_edit_index'] == -1:
-            # No edits at all in this session
-            result['is_complete'] = False
-            result['reason'] = 'No file modifications in session'
-        elif entries_since_last_edit > 15:
-            result['is_complete'] = True
-            result['reason'] = f'No edits in last {entries_since_last_edit} transcript entries'
+                        # Structure 1: data.message.message.content
+                        if 'data' in entry:
+                            data = entry['data']
+                            if 'message' in data:
+                                msg = data['message']
+                                if isinstance(msg, dict) and 'message' in msg:
+                                    inner_msg = msg['message']
+                                    if isinstance(inner_msg, dict) and 'content' in inner_msg:
+                                        content = inner_msg['content']
+
+                        # Structure 2: message.content
+                        if content is None and 'message' in entry:
+                            msg = entry['message']
+                            if isinstance(msg, dict) and 'content' in msg:
+                                content = msg['content']
+
+                        if not content or not isinstance(content, list):
+                            continue
+
+                        for item in content:
+                            if not isinstance(item, dict):
+                                continue
+                            if item.get('type') != 'tool_use':
+                                continue
+
+                            tool_name = item.get('name', '')
+                            if tool_name not in _TARGET_TOOLS:
+                                continue
+
+                            tool_input = item.get('input', {})
+                            if not isinstance(tool_input, dict):
+                                continue
+
+                            file_path = tool_input.get('file_path', '') or tool_input.get('notebook_path', '')
+                            if not file_path:
+                                continue
+
+                            # Normalize path to OS-native separators
+                            file_path = os.path.normpath(file_path)
+
+                            # Strip cwd prefix to get relative path
+                            if file_path.startswith(normalized_cwd):
+                                file_path = file_path[len(normalized_cwd):].lstrip(os.sep)
+
+                            if file_path not in seen_paths:
+                                seen_paths.add(file_path)
+                                file_paths.append(file_path)
 
     except Exception as e:
-        result['reason'] = f'Error reading transcript: {e}'
-        # Preserve existing cache on error
-        result['completion_cache'] = cached if cached else {
-            'last_scanned_line': 0, 'has_commit': False, 'has_test_success': False,
-            'has_build_success': False, 'has_task_complete': False,
-            'has_completion_phrase': False, 'last_edit_index': -1
-        }
+        debug_log(f"Error scanning transcript: {e}")
 
-    return result
+    # Build completion cache
+    completion_cache = {
+        'last_scanned_line': total_entries,
+        'has_commit': has_commit,
+        'has_test_success': has_test_success,
+        'has_build_success': has_build_success,
+        'has_task_complete': has_task_complete,
+        'has_completion_phrase': has_completion_phrase,
+        'last_edit_index': last_edit_index
+    }
+
+    # Determine if session is complete
+    entries_since_last_edit = total_entries - last_edit_index
+    is_complete = False
+    reason = 'No completion signals detected'
+
+    if has_commit and entries_since_last_edit > 3:
+        is_complete = True
+        reason = 'Git commit/push detected with no recent edits'
+    elif has_test_success and entries_since_last_edit > 5:
+        is_complete = True
+        reason = 'Tests passed (0 failures) with no recent edits'
+    elif has_build_success and entries_since_last_edit > 5:
+        is_complete = True
+        reason = 'Build succeeded (0 errors) with no recent edits'
+    elif has_task_complete and entries_since_last_edit > 5:
+        is_complete = True
+        reason = 'Task marked complete with no recent edits'
+    elif has_completion_phrase and entries_since_last_edit > 5:
+        is_complete = True
+        reason = 'Completion phrase detected with no recent edits'
+    elif last_edit_index == -1:
+        is_complete = False
+        reason = 'No file modifications in session'
+    elif entries_since_last_edit > 15:
+        is_complete = True
+        reason = f'No edits in last {entries_since_last_edit} transcript entries'
+
+    return {
+        'completion': {
+            'is_complete': is_complete,
+            'reason': reason,
+            'has_commit': has_commit,
+            'has_test_success': has_test_success,
+            'has_build_success': has_build_success,
+            'has_task_complete': has_task_complete,
+            'has_completion_phrase': has_completion_phrase,
+            'last_edit_index': last_edit_index,
+            'total_entries': total_entries,
+        },
+        'file_paths': file_paths,
+        'last_line': last_line,
+        'completion_cache': completion_cache,
+    }
 
 
 def is_claude_md_recent(dir_path: str, cwd: str, cooldown_minutes: int, session_state: dict = None) -> bool:
@@ -367,99 +463,6 @@ def is_claude_md_recent(dir_path: str, cwd: str, cooldown_minutes: int, session_
     except (ValueError, TypeError) as e:
         debug_log(f"    -> Error parsing generation time '{gen_time_str}': {e}")
         return False
-
-
-def extract_file_paths_from_transcript(transcript_path: str, cwd: str, start_line: int = 0) -> tuple:
-    """
-    Extract file paths from Edit/Write/NotebookEdit tool invocations.
-
-    Args:
-        transcript_path: Path to the JSONL transcript file
-        cwd: Current working directory
-        start_line: Line number to start from (0-indexed, skips lines before this)
-
-    Returns:
-        Tuple of (file_paths: list, last_line: int)
-    """
-    file_paths = []
-    seen_paths = set()
-    target_tools = {'Edit', 'Write', 'NotebookEdit'}
-    last_line = start_line
-
-    try:
-        with open(transcript_path, 'r', encoding='utf-8') as f:
-            for line_num, line in enumerate(f):
-                # Skip lines we've already processed
-                if line_num < start_line:
-                    continue
-
-                last_line = line_num + 1  # Track progress (1-indexed for next run)
-
-                line = line.strip()
-                if not line:
-                    continue
-
-                try:
-                    entry = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-
-                content = None
-
-                # Structure 1: data.message.message.content
-                if 'data' in entry:
-                    data = entry['data']
-                    if 'message' in data:
-                        msg = data['message']
-                        if isinstance(msg, dict) and 'message' in msg:
-                            inner_msg = msg['message']
-                            if isinstance(inner_msg, dict) and 'content' in inner_msg:
-                                content = inner_msg['content']
-
-                # Structure 2: message.content
-                if content is None and 'message' in entry:
-                    msg = entry['message']
-                    if isinstance(msg, dict) and 'content' in msg:
-                        content = msg['content']
-
-                if not content or not isinstance(content, list):
-                    continue
-
-                for item in content:
-                    if not isinstance(item, dict):
-                        continue
-
-                    if item.get('type') != 'tool_use':
-                        continue
-
-                    tool_name = item.get('name', '')
-                    if tool_name not in target_tools:
-                        continue
-
-                    tool_input = item.get('input', {})
-                    if not isinstance(tool_input, dict):
-                        continue
-
-                    file_path = tool_input.get('file_path', '') or tool_input.get('notebook_path', '')
-                    if not file_path:
-                        continue
-
-                    # Normalize path to OS-native separators
-                    file_path = os.path.normpath(file_path)
-                    normalized_cwd = os.path.normpath(cwd)
-
-                    # Strip cwd prefix to get relative path
-                    if file_path.startswith(normalized_cwd):
-                        file_path = file_path[len(normalized_cwd):].lstrip(os.sep)
-
-                    if file_path not in seen_paths:
-                        seen_paths.add(file_path)
-                        file_paths.append(file_path)
-
-    except Exception as e:
-        debug_log(f"Error extracting file paths: {e}")
-
-    return file_paths, last_line
 
 
 def group_files_by_directory(file_paths: list, cwd: str, excluded_dirs: list, threshold: int = 2) -> tuple:
@@ -562,22 +565,40 @@ def main():
             debug_log("EXIT: autoGenerate=False (disabled)")
             sys.exit(0)
 
+        # Team detection: check if running inside a team session
+        is_team_session = bool(input_data.get('team_name'))
+        if is_team_session:
+            debug_log(f"Team session detected: {input_data.get('team_name')}")
+
         # Load session state for incremental processing
         state_path = get_session_state_path(cwd, transcript_path)
         session_state = load_session_state(state_path)
         debug_log(f"Session state: last_line={session_state['last_processed_line']}, already_suggested={session_state['suggested_directories']}")
 
-        # Check if session appears complete (using cached signals for incremental scanning)
-        completion = check_session_completion(transcript_path, cached=session_state.get('completion_cache'))
-        debug_log(f"Completion check: is_complete={completion['is_complete']}, reason='{completion['reason']}'")
+        # Cleanup stale state/cache files on first invocation
+        if session_state['last_processed_line'] == 0:
+            cleanup_stale_files(cwd)
+
+        # Single-pass transcript scan (replaces separate completion check + file extraction)
+        scan_result = scan_transcript(
+            transcript_path, cwd,
+            start_line=session_state['last_processed_line'],
+            cached=session_state.get('completion_cache')
+        )
+
+        completion = scan_result['completion']
+        file_paths = scan_result['file_paths']
+        last_line = scan_result['last_line']
+
+        debug_log(f"Transcript scan (single-pass): is_complete={completion['is_complete']}, reason='{completion['reason']}'")
         debug_log(f"  - has_commit={completion['has_commit']}, has_test_success={completion['has_test_success']}")
         debug_log(f"  - has_build_success={completion['has_build_success']}, has_task_complete={completion['has_task_complete']}")
         debug_log(f"  - has_completion_phrase={completion['has_completion_phrase']}")
         debug_log(f"  - last_edit_index={completion['last_edit_index']}, total_entries={completion['total_entries']}")
+        debug_log(f"  - extracted {len(file_paths)} file paths (lines {session_state['last_processed_line']}-{last_line})")
 
         # Always update completion cache in session state
-        if 'completion_cache' in completion:
-            session_state['completion_cache'] = completion['completion_cache']
+        session_state['completion_cache'] = scan_result['completion_cache']
 
         if not completion['is_complete']:
             debug_log(f"EXIT: Session not complete - {completion['reason']}")
@@ -585,18 +606,14 @@ def main():
             save_session_state(state_path, session_state)
             sys.exit(0)
 
-        # Extract file paths (only from new transcript entries)
-        file_paths, last_line = extract_file_paths_from_transcript(
-            transcript_path, cwd, session_state['last_processed_line']
-        )
-        debug_log(f"Extracted {len(file_paths)} file paths from transcript (lines {session_state['last_processed_line']}-{last_line})")
-
         if not file_paths:
             debug_log("EXIT: No NEW Edit/Write/NotebookEdit operations found")
             # Still update the processed line to avoid re-scanning
             session_state['last_processed_line'] = last_line
             save_session_state(state_path, session_state)
             sys.exit(0)
+
+        debug_log(f"Extracted {len(file_paths)} file paths from transcript")
 
         # Group by directory (with parent aggregation for cross-dir refactoring)
         dir_counts, aggregation_info = group_files_by_directory(
@@ -658,7 +675,7 @@ def main():
                 summary_parts.append(f"{dir_path} ({count} files)")
         summary = ", ".join(summary_parts)
 
-        debug_log(f"TRIGGER: Blocking stop with {len(candidate_dirs)} directories")
+        debug_log(f"TRIGGER: {'Suggesting' if is_team_session else 'Blocking'} stop with {len(candidate_dirs)} directories")
 
         # Update session state with newly suggested directories and generation times
         session_state['suggested_directories'].extend(dirs_list)
@@ -685,10 +702,19 @@ The context-builder agent has access to all local-memory MCP tools and will orch
         if skip_notes:
             reason += f"\n\n(Skipped: {', '.join(skip_notes)})"
 
-        result = {
-            'decision': 'block',
-            'reason': reason
-        }
+        # Team detection: use 'allow' + systemMessage instead of 'block' to avoid
+        # interrupting teammate workflows
+        if is_team_session:
+            result = {
+                'decision': 'allow',
+                'reason': reason
+            }
+        else:
+            result = {
+                'decision': 'block',
+                'reason': reason
+            }
+
         print(json.dumps(result))
         sys.exit(0)
 

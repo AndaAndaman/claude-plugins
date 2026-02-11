@@ -11,38 +11,9 @@ import sys
 import os
 from pathlib import Path
 
-
-def load_settings(cwd: str) -> dict:
-    """Load settings from .claude/local-memory.local.md YAML frontmatter."""
-    settings = {
-        'threshold': 2,
-        'autoGenerate': True
-    }
-
-    settings_file = Path(cwd) / '.claude' / 'local-memory.local.md'
-
-    if not settings_file.exists():
-        return settings
-
-    try:
-        with open(settings_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        import re
-        # Extract autoGenerate
-        match = re.search(r'autoGenerate:\s*(true|false)', content, re.IGNORECASE)
-        if match:
-            settings['autoGenerate'] = match.group(1).lower() == 'true'
-
-        # Extract threshold
-        match = re.search(r'threshold:\s*(\d+)', content)
-        if match:
-            settings['threshold'] = int(match.group(1))
-
-    except Exception:
-        pass
-
-    return settings
+# Add shared module to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
+from settings import load_settings
 
 
 def main():
@@ -62,7 +33,7 @@ def main():
 
         # Only show full context on new sessions, brief on resume
         if source == 'startup':
-            context_parts.append("📝 **local-memory Plugin Active**")
+            context_parts.append("**local-memory Plugin Active**")
             context_parts.append("")
             context_parts.append("This plugin helps maintain directory-level CLAUDE.md context files.")
             context_parts.append("")
@@ -81,11 +52,11 @@ def main():
                 context_parts.append("Use `/build-context` command or MCP tools manually to build context.")
 
             context_parts.append("")
-            context_parts.append("💡 Use MCP tools to document modules as you work through the codebase.")
+            context_parts.append("Use MCP tools to document modules as you work through the codebase.")
 
         elif source == 'resume':
             # Brief reminder on resume
-            context_parts.append("📝 local-memory plugin active (MCP tools available for context building)")
+            context_parts.append("local-memory plugin active (MCP tools available for context building)")
 
         # Return context
         if context_parts:

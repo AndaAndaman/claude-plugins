@@ -344,15 +344,6 @@ See `examples/` directory for complete CLAUDE.md samples:
 - `good-context-example.md` - Well-structured, concise documentation showing proper module overview, file summaries, patterns, and dependencies
 - `bad-context-example.md` - Common mistakes to avoid with explanations of why they're problematic
 
-## Utilities
-
-Use `scripts/analyze-directory.sh` for automated pattern detection:
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/skills/directory-summarization/scripts/analyze-directory.sh" <directory>
-```
-
-Returns JSON with detected patterns, file types, and import graph.
-
 ## References
 
 For deeper guidance, see:

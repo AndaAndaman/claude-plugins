@@ -74,7 +74,9 @@ Parse the input to identify:
 - **Project root**: The cwd or project root path
 - **Context**: Why is this being triggered? (automatic hook vs. manual request)
 
-### Step 2: Analyze Each Directory
+### Step 2 (Optional): Analyze Each Directory
+
+> **Note:** `generate_context` in Step 3 internally calls `analyze_directory`, so you can skip this step unless you need to inspect the raw analysis first (e.g., to decide whether to proceed or to adjust `max_files`).
 
 For each directory, use the MCP tool to analyze structure:
 
@@ -97,21 +99,20 @@ This returns:
 
 ### Step 3: Generate Context Content
 
-Use the analysis to generate CLAUDE.md markdown content:
+Use the analysis to generate CLAUDE.md markdown content (this also runs analysis internally):
 
 ```
 use_mcp_tool(
   "mcp__plugin_local-memory_local-memory__generate_context",
   {
     "directory": "<relative_path_from_project_root>",
-    "project_root": "<project_root_path>",
-    "analysis_summary": "<summary_from_step2>"
+    "project_root": "<project_root_path>"
   }
 )
 ```
 
 This returns:
-- Generated CLAUDE.md markdown content
+- Generated CLAUDE.md markdown content with auto-generated markers
 - Structured with sections: Overview, Files, Patterns, Dependencies
 - Follows directory-summarization skill best practices
 - Concise summaries (1-2 sentences per file)
@@ -125,15 +126,16 @@ use_mcp_tool(
   "mcp__plugin_local-memory_local-memory__write_context",
   {
     "directory": "<relative_path_from_project_root>",
-    "content": "<generated_markdown_from_step3>"
+    "content": "<generated_markdown_from_step3>",
+    "project_root": "<project_root_path>"
   }
 )
 ```
 
 The write operation:
 - Creates new CLAUDE.md if it doesn't exist
-- Smartly merges with existing CLAUDE.md (preserves user sections)
-- Backs up existing content before merge
+- Smartly merges with existing CLAUDE.md (preserves user content before and after auto-generated block)
+- Ensures auto-generated markers are present even if you rewrite the content
 - Returns success/failure status
 
 ### Step 5: Report Results
@@ -153,9 +155,9 @@ You have access to these local-memory MCP tools:
 
 | Tool | Purpose | Key Parameters |
 |------|---------|----------------|
-| `analyze_directory` | Scan directory structure and detect patterns | `directory`, `project_root` |
-| `generate_context` | Generate CLAUDE.md markdown content | `directory`, `project_root`, `analysis_summary` |
-| `write_context` | Write/merge CLAUDE.md file with smart preservation | `directory`, `content` |
+| `analyze_directory` | Scan directory structure and detect patterns | `directory`, `project_root`, `depth` |
+| `generate_context` | Generate CLAUDE.md markdown content | `directory`, `project_root`, `max_files`, `analysis` |
+| `write_context` | Write/merge CLAUDE.md file with smart preservation | `directory`, `content`, `project_root` |
 | `list_context_files` | List all CLAUDE.md files in project | `project_root` |
 
 ## Quality Guidelines
@@ -186,11 +188,11 @@ When generating context, ensure:
 
 The `write_context` MCP tool preserves user content:
 
-- **Preserves**: User-written sections, custom notes, manual additions
-- **Updates**: Auto-generated sections (marked with `<!-- auto-generated -->` comments)
-- **Backs up**: Creates `.backup` before merging
+- **Preserves**: User-written content both ABOVE and BELOW the auto-generated block
+- **Updates**: Auto-generated sections (between `<!-- AUTO-GENERATED -->` and `<!-- END AUTO-GENERATED CONTENT -->` markers)
+- **Ensures markers**: Adds opening/closing markers if missing from your content
 
-Your job is to generate clean, well-structured content that merges smoothly.
+Your job is to generate clean, well-structured content that merges smoothly. You can freely rewrite `generate_context` output — the markers will be re-added automatically.
 
 ## Batch Operations
 
@@ -265,12 +267,10 @@ Input: "Build context for src/api and src/utils"
 Directories: ["src/api", "src/utils"]
 Project root: "/home/user/project"
 
-# Step 2-4: Process each directory
-[Use analyze_directory MCP tool for src/api]
+# Step 3-4: Process each directory (Step 2 skipped — generate_context runs analysis internally)
 [Use generate_context MCP tool for src/api]
 [Use write_context MCP tool for src/api]
 
-[Use analyze_directory MCP tool for src/utils]
 [Use generate_context MCP tool for src/utils]
 [Use write_context MCP tool for src/utils]
 

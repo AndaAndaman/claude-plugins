@@ -13,6 +13,10 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
 
+# Add shared module to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
+from settings import DEFAULT_EXCLUDED_DIRS, load_settings as shared_load_settings, is_excluded_path
+
 # MCP SDK imports
 try:
     from mcp.server.models import InitializationOptions
@@ -27,74 +31,17 @@ except ImportError:
 # Initialize MCP server
 server = Server("local-memory")
 
-# Default exclusions
-DEFAULT_EXCLUSIONS = [
-    "node_modules", "vendor", "packages",
-    ".git", ".svn", ".hg", ".bzr",
-    "dist", "build", "out", "target", "bin", "obj",
-    "test", "tests", "spec", "specs", "__tests__", "__snapshots__",
-    "coverage", ".next", ".nuxt", ".angular", "__pycache__",
-    "temp", "tmp", "cache"
-]
+# DEFAULT_EXCLUDED_DIRS imported from shared.settings
 
 
 def read_settings(project_root: str) -> Dict:
-    """Read settings from .claude/local-memory.local.md"""
-    settings = {
-        "threshold": 2,
-        "autoGenerate": True,
-        "maxFilesAnalyzed": 50,
-        "excludedDirectories": []
-    }
-
-    settings_file = os.path.join(project_root, ".claude", "local-memory.local.md")
-    if not os.path.exists(settings_file):
-        return settings
-
-    try:
-        with open(settings_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        # Extract YAML frontmatter
-        if content.startswith('---'):
-            parts = content.split('---', 2)
-            if len(parts) >= 2:
-                frontmatter = parts[1]
-
-                # Parse simple YAML fields
-                for line in frontmatter.split('\n'):
-                    line = line.strip()
-                    if ':' in line and not line.startswith('-'):
-                        key, value = line.split(':', 1)
-                        key = key.strip()
-                        value = value.strip()
-
-                        if key == "threshold":
-                            settings["threshold"] = int(value)
-                        elif key == "autoGenerate":
-                            settings["autoGenerate"] = value.lower() == "true"
-                        elif key == "maxFilesAnalyzed":
-                            settings["maxFilesAnalyzed"] = int(value)
-                    elif line.startswith('-') and 'excludedDirectories' in frontmatter:
-                        # Extract excluded directory
-                        excluded = line[1:].strip()
-                        if excluded:
-                            settings["excludedDirectories"].append(excluded)
-    except Exception as e:
-        print(f"Warning: Error reading settings: {e}", file=sys.stderr)
-
-    return settings
+    """Read settings from shared module (single source of truth)."""
+    return shared_load_settings(project_root)
 
 
 def is_excluded(path: str, exclusions: List[str]) -> bool:
-    """Check if path contains any excluded directory"""
-    path_parts = Path(path).parts
-    all_exclusions = DEFAULT_EXCLUSIONS + exclusions
-
-    for excluded in all_exclusions:
-        if excluded in path_parts:
-            return True
-    return False
+    """Check if path contains any excluded directory."""
+    return is_excluded_path(path, exclusions)
 
 
 def detect_language(files: List[str]) -> str:
@@ -316,6 +263,10 @@ async def handle_list_tools() -> List[Tool]:
                     "project_root": {
                         "type": "string",
                         "description": "Project root directory (default: current directory)"
+                    },
+                    "depth": {
+                        "type": "integer",
+                        "description": "Directory scan depth (default: 1, immediate children only). Set >1 to include subdirectory files."
                     }
                 },
                 "required": ["directory"]
@@ -338,6 +289,10 @@ async def handle_list_tools() -> List[Tool]:
                     "max_files": {
                         "type": "integer",
                         "description": "Maximum files to analyze (default: 50)"
+                    },
+                    "analysis": {
+                        "type": "object",
+                        "description": "Pre-computed analysis JSON from a previous analyze_directory call. If provided, skips internal re-analysis."
                     }
                 },
                 "required": ["directory"]
@@ -356,6 +311,10 @@ async def handle_list_tools() -> List[Tool]:
                     "content": {
                         "type": "string",
                         "description": "Markdown content to write"
+                    },
+                    "project_root": {
+                        "type": "string",
+                        "description": "Project root directory (for resolving relative paths)"
                     },
                     "smart_merge": {
                         "type": "boolean",
@@ -389,6 +348,7 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
     if name == "analyze_directory":
         directory = arguments.get("directory", ".")
         project_root = arguments.get("project_root", os.getcwd())
+        depth = arguments.get("depth", 1)
 
         # Resolve path
         if not os.path.isabs(directory):
@@ -410,12 +370,35 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
                 text=json.dumps({"error": f"Directory is excluded: {directory}"})
             )]
 
-        # Find files
+        # Find files (with optional depth scanning)
         files = []
         try:
-            for entry in os.scandir(directory):
-                if entry.is_file() and not entry.name.startswith('.'):
-                    files.append(entry.name)
+            if depth <= 1:
+                # Original behavior: immediate children only
+                for entry in os.scandir(directory):
+                    if entry.is_file() and not entry.name.startswith('.'):
+                        files.append(entry.name)
+            else:
+                # Recursive scan up to specified depth
+                def _scan_recursive(dir_path: str, current_depth: int, max_depth: int, base_dir: str):
+                    """Recursively scan directories up to max_depth."""
+                    found = []
+                    try:
+                        for entry in os.scandir(dir_path):
+                            if entry.name.startswith('.'):
+                                continue
+                            if entry.is_file():
+                                # Use relative path from the base directory
+                                rel_path = os.path.relpath(entry.path, base_dir)
+                                found.append(rel_path)
+                            elif entry.is_dir() and current_depth < max_depth:
+                                if not is_excluded(entry.path, settings["excludedDirectories"]):
+                                    found.extend(_scan_recursive(entry.path, current_depth + 1, max_depth, base_dir))
+                    except PermissionError:
+                        pass
+                    return found
+
+                files = _scan_recursive(directory, 1, depth, directory)
         except Exception as e:
             return [TextContent(
                 type="text",
@@ -463,16 +446,20 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
         directory = arguments.get("directory", ".")
         project_root = arguments.get("project_root", os.getcwd())
         max_files = arguments.get("max_files", 50)
+        pre_analysis = arguments.get("analysis", None)
 
-        # First analyze directory
-        analysis_result = await handle_call_tool("analyze_directory", {
-            "directory": directory,
-            "project_root": project_root
-        })
+        # Use pre-computed analysis if provided, otherwise analyze
+        if pre_analysis and isinstance(pre_analysis, dict) and "error" not in pre_analysis:
+            analysis = pre_analysis
+        else:
+            analysis_result = await handle_call_tool("analyze_directory", {
+                "directory": directory,
+                "project_root": project_root
+            })
 
-        analysis = json.loads(analysis_result[0].text)
-        if "error" in analysis:
-            return analysis_result
+            analysis = json.loads(analysis_result[0].text)
+            if "error" in analysis:
+                return analysis_result
 
         # Resolve directory path for file reading
         abs_directory = directory
@@ -569,32 +556,98 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
         directory = arguments.get("directory", ".")
         content = arguments.get("content", "")
         smart_merge = arguments.get("smart_merge", True)
+        project_root = arguments.get("project_root", os.getcwd())
 
-        # Resolve path
+        # Resolve path consistently with other tools (use project_root, not cwd)
         if not os.path.isabs(directory):
-            directory = os.path.abspath(directory)
+            directory = os.path.join(project_root, directory)
 
         claude_md_path = os.path.join(directory, "CLAUDE.md")
+        warnings = []
 
-        # Smart merge if file exists
+        # --- M11: Content validation before writing ---
+        if not content or not content.strip():
+            return [TextContent(
+                type="text",
+                text=json.dumps({"error": "Content is empty. Refusing to write empty CLAUDE.md."})
+            )]
+
+        content_len = len(content.strip())
+        if content_len < 50:
+            warnings.append(f"Content is suspiciously short ({content_len} chars). May be incomplete.")
+        if content_len > 15000:
+            warnings.append(f"Content is suspiciously long ({content_len} chars). Consider splitting into sub-modules.")
+
+        # Ensure auto-generated markers are present (agent may strip them when rewriting)
+        opening_marker = f"<!-- AUTO-GENERATED by local-memory plugin on {datetime.now().strftime('%Y-%m-%d')} -->"
+        closing_marker = "<!-- END AUTO-GENERATED CONTENT -->"
+
+        if "<!-- AUTO-GENERATED" not in content:
+            content = opening_marker + "\n" + "<!-- To preserve custom content, add sections outside auto-gen blocks -->\n\n" + content
+
+        if closing_marker not in content:
+            content = content.rstrip("\n") + "\n\n" + closing_marker + "\n"
+
+        # Verify markers are present after enforcement
+        if "<!-- AUTO-GENERATED" not in content or closing_marker not in content:
+            warnings.append("Marker enforcement failed. Content may have unexpected structure.")
+
+        # --- M10: Smart merge with regex-based marker finding ---
         if smart_merge and os.path.exists(claude_md_path):
             try:
                 with open(claude_md_path, 'r', encoding='utf-8') as f:
                     existing = f.read()
 
-                # Extract user content (outside auto-gen blocks)
-                user_content = ""
-                if "<!-- END AUTO-GENERATED CONTENT -->" in existing:
-                    parts = existing.split("<!-- END AUTO-GENERATED CONTENT -->")
-                    if len(parts) > 1:
-                        user_content = parts[1]
+                # Use regex to find all opening and closing markers
+                open_markers = list(re.finditer(r'<!-- AUTO-GENERATED\b[^>]*-->', existing))
+                close_markers = list(re.finditer(r'<!-- END AUTO-GENERATED CONTENT -->', existing))
 
-                # Combine new auto-gen + preserved user content
-                if user_content.strip():
-                    content = content + "\n" + user_content
+                if len(open_markers) > 1 or len(close_markers) > 1:
+                    print(f"Warning: Multiple auto-gen marker pairs found in {claude_md_path} "
+                          f"({len(open_markers)} open, {len(close_markers)} close). "
+                          f"Using outermost pair.", file=sys.stderr)
+                    warnings.append(f"Multiple marker pairs detected ({len(open_markers)} open, "
+                                    f"{len(close_markers)} close). Used outermost pair for merge.")
+
+                before_content = ""
+                after_content = ""
+
+                if open_markers and close_markers:
+                    # Use FIRST opening marker and LAST closing marker (outermost pair)
+                    first_open = open_markers[0]
+                    last_close = close_markers[-1]
+
+                    # Content BEFORE the first opening marker
+                    before_part = existing[:first_open.start()]
+                    if before_part.strip():
+                        before_content = before_part
+
+                    # Content AFTER the last closing marker
+                    after_part = existing[last_close.end():]
+                    if after_part.strip():
+                        after_content = after_part
+                elif open_markers:
+                    # Only opening marker(s), no closing - take content before first open
+                    before_part = existing[:open_markers[0].start()]
+                    if before_part.strip():
+                        before_content = before_part
+                    warnings.append("Existing file has opening marker but no closing marker.")
+                elif close_markers:
+                    # Only closing marker(s), no opening - take content after last close
+                    after_part = existing[close_markers[-1].end():]
+                    if after_part.strip():
+                        after_content = after_part
+                    warnings.append("Existing file has closing marker but no opening marker.")
+
+                # Combine: user-before + new auto-gen + user-after
+                if before_content.strip():
+                    content = before_content.rstrip("\n") + "\n\n" + content
+                if after_content.strip():
+                    content = content + "\n" + after_content
 
             except Exception as e:
                 print(f"Warning: Smart merge failed: {e}", file=sys.stderr)
+                warnings.append(f"Smart merge failed: {e}")
 
         # Write file
         existed = os.path.exists(claude_md_path)
@@ -607,6 +660,8 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
                 "path": claude_md_path,
                 "action": "updated" if existed else "created"
             }
+            if warnings:
+                result["warnings"] = warnings
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
         except Exception as e:
@@ -618,12 +673,16 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
     elif name == "list_context_files":
         project_root = arguments.get("project_root", os.getcwd())
 
+        # Load user exclusions from settings
+        settings = read_settings(project_root)
+        user_exclusions = settings.get("excludedDirectories", [])
+
         # Find all CLAUDE.md files
         context_files = []
         try:
             for root, dirs, files in os.walk(project_root):
-                # Skip excluded directories
-                dirs[:] = [d for d in dirs if not is_excluded(os.path.join(root, d), [])]
+                # Skip excluded directories (respects both defaults and user config)
+                dirs[:] = [d for d in dirs if not is_excluded(os.path.join(root, d), user_exclusions)]
 
                 if "CLAUDE.md" in files:
                     rel_path = os.path.relpath(os.path.join(root, "CLAUDE.md"), project_root)

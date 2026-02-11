@@ -195,9 +195,8 @@ Analyzing src/components...
 ✓ Updated context for src/components (25 files documented)
 
 CLAUDE.md updated at src/components/CLAUDE.md
-- User sections preserved
+- User sections preserved (before and after auto-generated block)
 - Auto-generated sections refreshed
-- Backup saved to CLAUDE.md.backup
 ```
 
 ## MCP Tools Reference
@@ -216,8 +215,7 @@ The context-builder agent uses these MCP tools (you don't call them directly):
 When a CLAUDE.md file already exists:
 - **Preserves**: User-written sections, custom notes, manual additions
 - **Updates**: Auto-generated sections (marked with comments)
-- **Backs up**: Creates `.backup` file before merging
-- **Reports**: Shows what was preserved vs. updated
+- **Reports**: Shows what was preserved vs. updated, with warnings if content seems short or long
 
 ## Error Handling
 
@@ -297,4 +295,4 @@ Command succeeds when:
 - Run regularly to keep context fresh
 - Use with specific subdirectories for focused documentation
 - Check generated CLAUDE.md and add manual notes if needed
-- Backup will be created, so don't worry about losing manual edits
+- User content before and after auto-generated markers is preserved during merge

@@ -35,6 +35,10 @@ from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
 
+# Add shared module to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
+from settings import DEFAULT_EXCLUDED_DIRS, load_settings as _shared_load_settings
+
 
 # Global debug state
 DEBUG_ENABLED = False
@@ -50,10 +54,21 @@ def get_session_state_path(cwd: str, transcript_path: str) -> str:
 
 def load_session_state(state_path: str) -> dict:
     """Load session state from file."""
+    default_completion_cache = {
+        'last_scanned_line': 0,
+        'has_commit': False,
+        'has_test_success': False,
+        'has_build_success': False,
+        'has_task_complete': False,
+        'has_completion_phrase': False,
+        'last_edit_index': -1
+    }
     default_state = {
         'last_processed_line': 0,
         'suggested_directories': [],
-        'last_run_time': None
+        'last_run_time': None,
+        'generation_times': {},
+        'completion_cache': dict(default_completion_cache)
     }
 
     if not os.path.exists(state_path):
@@ -66,6 +81,13 @@ def load_session_state(state_path: str) -> dict:
             for key, default_val in default_state.items():
                 if key not in state:
                     state[key] = default_val
+            # Ensure completion_cache sub-keys exist
+            if 'completion_cache' in state and isinstance(state['completion_cache'], dict):
+                for key, default_val in default_completion_cache.items():
+                    if key not in state['completion_cache']:
+                        state['completion_cache'][key] = default_val
+            else:
+                state['completion_cache'] = dict(default_completion_cache)
             return state
     except Exception:
         return default_state
@@ -115,20 +137,8 @@ def init_debug(cwd: str, settings: dict):
         debug_log(f"CWD: {cwd}")
 
 
-# Default settings
-DEFAULT_THRESHOLD = 2
-DEFAULT_AUTO_GENERATE = True
-DEFAULT_MAX_FILES = 50
-DEFAULT_COOLDOWN_MINUTES = 30  # Skip if CLAUDE.md updated within this time
-DEFAULT_DEBUG = False
-DEFAULT_EXCLUDED_DIRS = [
-    "node_modules", "vendor", "packages",
-    ".git", ".svn", ".hg", ".bzr",
-    "dist", "build", "out", "target", "bin", "obj",
-    "test", "tests", "spec", "specs", "__tests__", "__snapshots__",
-    "coverage", ".next", ".nuxt", ".angular", "__pycache__",
-    "temp", "tmp", "cache"
-]
+# Default settings (from shared module, kept as local references)
+# DEFAULT_EXCLUDED_DIRS imported from shared.settings
 
 # Completion signal patterns (detected in transcript)
 COMPLETION_SIGNALS = [
@@ -158,6 +168,7 @@ COMPLETION_SIGNALS = [
 
     # Explicit completion phrases in assistant messages
     r'"role":\s*"assistant".*\b(committed|pushed|done|complete|finished|ready to commit|looks good|that.s all|tests pass|build succeeded)\b',
+    r'"role":\s*"assistant".*\b(all good|all set|here.s the summary|that.s it|wrap.?up|changes are ready|refactored|summary of changes)\b',
 ]
 
 # Active coding signals (should NOT trigger during these)
@@ -168,82 +179,26 @@ ACTIVE_CODING_SIGNALS = [
 
 
 def load_settings(cwd: str) -> dict:
-    """
-    Load settings from .claude/local-memory.local.md YAML frontmatter.
-    """
-    settings = {
-        'threshold': DEFAULT_THRESHOLD,
-        'autoGenerate': DEFAULT_AUTO_GENERATE,
-        'maxFilesAnalyzed': DEFAULT_MAX_FILES,
-        'cooldownMinutes': DEFAULT_COOLDOWN_MINUTES,
-        'debug': DEFAULT_DEBUG,
-        'excludedDirectories': DEFAULT_EXCLUDED_DIRS.copy()
-    }
-
-    settings_file = Path(cwd) / '.claude' / 'local-memory.local.md'
-
-    if not settings_file.exists():
-        return settings
-
-    try:
-        with open(settings_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        # Extract YAML frontmatter between --- markers
-        match = re.search(r'^---\s*\n(.*?)\n---', content, re.DOTALL | re.MULTILINE)
-        if not match:
-            return settings
-
-        frontmatter = match.group(1)
-
-        # Extract autoGenerate
-        auto_gen_match = re.search(r'autoGenerate:\s*(true|false)', frontmatter, re.IGNORECASE)
-        if auto_gen_match:
-            settings['autoGenerate'] = auto_gen_match.group(1).lower() == 'true'
-
-        # Extract threshold
-        threshold_match = re.search(r'threshold:\s*(\d+)', frontmatter)
-        if threshold_match:
-            settings['threshold'] = int(threshold_match.group(1))
-
-        # Extract maxFilesAnalyzed
-        max_files_match = re.search(r'maxFilesAnalyzed:\s*(\d+)', frontmatter)
-        if max_files_match:
-            settings['maxFilesAnalyzed'] = int(max_files_match.group(1))
-
-        # Extract cooldownMinutes
-        cooldown_match = re.search(r'cooldownMinutes:\s*(\d+)', frontmatter)
-        if cooldown_match:
-            settings['cooldownMinutes'] = int(cooldown_match.group(1))
-
-        # Extract debug
-        debug_match = re.search(r'debug:\s*(true|false)', frontmatter, re.IGNORECASE)
-        if debug_match:
-            settings['debug'] = debug_match.group(1).lower() == 'true'
-
-        # Extract excludedDirectories
-        excluded_match = re.search(r'excludedDirectories:\s*\n((?:\s+-\s+.+\n?)+)', frontmatter)
-        if excluded_match:
-            excluded_list = excluded_match.group(1)
-            excluded_dirs = re.findall(r'^\s+-\s+(.+)$', excluded_list, re.MULTILINE)
-            if excluded_dirs:
-                settings['excludedDirectories'].extend(excluded_dirs)
-
-    except Exception:
-        pass
-
-    return settings
+    """Load settings from shared module (single source of truth)."""
+    return _shared_load_settings(cwd)
 
 
-def check_session_completion(transcript_path: str) -> dict:
+def check_session_completion(transcript_path: str, cached: dict = None) -> dict:
     """
     Analyze transcript to detect if coding session appears complete.
+    Uses cached completion signals to avoid re-scanning the entire transcript.
+
+    Args:
+        transcript_path: Path to the JSONL transcript file
+        cached: Previous completion_cache from session state. If provided,
+                only new lines (after last_scanned_line) are scanned.
 
     Returns dict with:
     - is_complete: bool - True if session appears done
     - reason: str - Why we think session is/isn't complete
     - last_edit_index: int - Index of last Edit/Write operation
     - total_entries: int - Total transcript entries
+    - completion_cache: dict - Updated cache to store in session state
     """
     result = {
         'is_complete': False,
@@ -257,6 +212,17 @@ def check_session_completion(transcript_path: str) -> dict:
         'has_completion_phrase': False
     }
 
+    # Initialize from cache if provided
+    start_line = 0
+    if cached and isinstance(cached, dict) and cached.get('last_scanned_line', 0) > 0:
+        start_line = cached['last_scanned_line']
+        result['has_commit'] = cached.get('has_commit', False)
+        result['has_test_success'] = cached.get('has_test_success', False)
+        result['has_build_success'] = cached.get('has_build_success', False)
+        result['has_task_complete'] = cached.get('has_task_complete', False)
+        result['has_completion_phrase'] = cached.get('has_completion_phrase', False)
+        result['last_edit_index'] = cached.get('last_edit_index', -1)
+
     # Signal categories for better reason reporting
     git_patterns = [r'git\s+(commit|push)']
     test_patterns = [r'pass(ed|ing)?.*0\s+fail', r'0\s+failing', r'All\s+\d+\s+tests?\s+passed', r'OK\s+\(\d+', r'Passed!.*Failed[:\s]+0', r'Failed[:\s]+0']
@@ -265,39 +231,52 @@ def check_session_completion(transcript_path: str) -> dict:
 
     try:
         with open(transcript_path, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
+            for i, line in enumerate(f):
+                # Always count total entries
+                result['total_entries'] = i + 1
 
-        result['total_entries'] = len(lines)
+                # Skip already-scanned lines for signal detection
+                if i < start_line:
+                    continue
 
-        # Scan transcript for signals
-        for i, line in enumerate(lines):
-            # Check for completion signals by category
-            for pattern in git_patterns:
-                if re.search(pattern, line, re.IGNORECASE):
-                    result['has_commit'] = True
+                # Check for completion signals by category
+                for pattern in git_patterns:
+                    if re.search(pattern, line, re.IGNORECASE):
+                        result['has_commit'] = True
 
-            for pattern in test_patterns:
-                if re.search(pattern, line, re.IGNORECASE):
-                    result['has_test_success'] = True
+                for pattern in test_patterns:
+                    if re.search(pattern, line, re.IGNORECASE):
+                        result['has_test_success'] = True
 
-            for pattern in build_patterns:
-                if re.search(pattern, line, re.IGNORECASE):
-                    result['has_build_success'] = True
+                for pattern in build_patterns:
+                    if re.search(pattern, line, re.IGNORECASE):
+                        result['has_build_success'] = True
 
-            for pattern in task_patterns:
-                if re.search(pattern, line, re.IGNORECASE):
-                    result['has_task_complete'] = True
+                for pattern in task_patterns:
+                    if re.search(pattern, line, re.IGNORECASE):
+                        result['has_task_complete'] = True
 
-            # Check all COMPLETION_SIGNALS for general completion phrases
-            for pattern in COMPLETION_SIGNALS:
-                if re.search(pattern, line, re.IGNORECASE):
-                    if 'role.*assistant' in pattern:
-                        result['has_completion_phrase'] = True
+                # Check all COMPLETION_SIGNALS for general completion phrases
+                for pattern in COMPLETION_SIGNALS:
+                    if re.search(pattern, line, re.IGNORECASE):
+                        if '"role"' in pattern and '"assistant"' in pattern:
+                            result['has_completion_phrase'] = True
 
-            # Track last Edit/Write operation
-            for pattern in ACTIVE_CODING_SIGNALS:
-                if re.search(pattern, line):
-                    result['last_edit_index'] = i
+                # Track last Edit/Write operation
+                for pattern in ACTIVE_CODING_SIGNALS:
+                    if re.search(pattern, line):
+                        result['last_edit_index'] = i
+
+        # Build updated cache for next run
+        result['completion_cache'] = {
+            'last_scanned_line': result['total_entries'],
+            'has_commit': result['has_commit'],
+            'has_test_success': result['has_test_success'],
+            'has_build_success': result['has_build_success'],
+            'has_task_complete': result['has_task_complete'],
+            'has_completion_phrase': result['has_completion_phrase'],
+            'last_edit_index': result['last_edit_index']
+        }
 
         # Determine if session is complete
         entries_since_last_edit = result['total_entries'] - result['last_edit_index']
@@ -309,9 +288,9 @@ def check_session_completion(transcript_path: str) -> dict:
         # 4. Has task marked complete AND no edits in last 5 entries, OR
         # 5. Has completion phrase AND no edits in last 5 entries, OR
         # 6. No edits in last 15 entries (long conversation gap)
-        if result['has_commit']:
+        if result['has_commit'] and entries_since_last_edit > 3:
             result['is_complete'] = True
-            result['reason'] = 'Git commit/push detected'
+            result['reason'] = 'Git commit/push detected with no recent edits'
         elif result['has_test_success'] and entries_since_last_edit > 5:
             result['is_complete'] = True
             result['reason'] = 'Tests passed (0 failures) with no recent edits'
@@ -334,14 +313,22 @@ def check_session_completion(transcript_path: str) -> dict:
 
     except Exception as e:
         result['reason'] = f'Error reading transcript: {e}'
+        # Preserve existing cache on error
+        result['completion_cache'] = cached if cached else {
+            'last_scanned_line': 0, 'has_commit': False, 'has_test_success': False,
+            'has_build_success': False, 'has_task_complete': False,
+            'has_completion_phrase': False, 'last_edit_index': -1
+        }
 
     return result
 
 
-def is_claude_md_recent(dir_path: str, cwd: str, cooldown_minutes: int) -> bool:
+def is_claude_md_recent(dir_path: str, cwd: str, cooldown_minutes: int, session_state: dict = None) -> bool:
     """
-    Check if CLAUDE.md in directory was updated within cooldown period.
-    Returns True if should skip (recently updated), False otherwise.
+    Check if CLAUDE.md in directory was generated within cooldown period.
+    Uses session state generation_times instead of file mtime to avoid
+    false cooldown resets when users manually edit CLAUDE.md.
+    Returns True if should skip (recently generated), False otherwise.
     """
     # Normalize path separators for cross-platform compatibility
     dir_path = os.path.normpath(dir_path)
@@ -355,25 +342,30 @@ def is_claude_md_recent(dir_path: str, cwd: str, cooldown_minutes: int) -> bool:
 
     # Normalize again after join to ensure consistent separators
     full_dir = os.path.normpath(full_dir)
-    claude_md_path = os.path.join(full_dir, 'CLAUDE.md')
 
-    debug_log(f"  Cooldown check: {claude_md_path}")
+    debug_log(f"  Cooldown check: {full_dir}")
 
-    if not os.path.exists(claude_md_path):
-        debug_log(f"    -> No CLAUDE.md found")
-        return False  # No CLAUDE.md, don't skip
+    # Check session state generation_times instead of file mtime
+    generation_times = (session_state or {}).get('generation_times', {})
+
+    # Look up by both the original dir_path and the full_dir (normalized)
+    gen_time_str = generation_times.get(dir_path) or generation_times.get(full_dir)
+
+    if not gen_time_str:
+        debug_log(f"    -> No generation time recorded for this directory")
+        return False
 
     try:
-        mtime = os.path.getmtime(claude_md_path)
-        age_minutes = (time.time() - mtime) / 60
+        gen_time = datetime.fromisoformat(gen_time_str)
+        age_minutes = (datetime.now() - gen_time).total_seconds() / 60
 
         is_recent = age_minutes < cooldown_minutes
-        debug_log(f"    -> Age: {age_minutes:.1f}min, cooldown: {cooldown_minutes}min, skip: {is_recent}")
+        debug_log(f"    -> Generated {age_minutes:.1f}min ago, cooldown: {cooldown_minutes}min, skip: {is_recent}")
 
         return is_recent
 
-    except Exception as e:
-        debug_log(f"    -> Error checking mtime: {e}")
+    except (ValueError, TypeError) as e:
+        debug_log(f"    -> Error parsing generation time '{gen_time_str}': {e}")
         return False
 
 
@@ -448,29 +440,40 @@ def extract_file_paths_from_transcript(transcript_path: str, cwd: str, start_lin
                     if not isinstance(tool_input, dict):
                         continue
 
-                    file_path = tool_input.get('file_path', '')
+                    file_path = tool_input.get('file_path', '') or tool_input.get('notebook_path', '')
                     if not file_path:
                         continue
 
-                    # Normalize path
-                    file_path = file_path.replace('\\', '/')
-                    normalized_cwd = cwd.replace('\\', '/')
+                    # Normalize path to OS-native separators
+                    file_path = os.path.normpath(file_path)
+                    normalized_cwd = os.path.normpath(cwd)
 
+                    # Strip cwd prefix to get relative path
                     if file_path.startswith(normalized_cwd):
-                        file_path = file_path[len(normalized_cwd):].lstrip('/')
+                        file_path = file_path[len(normalized_cwd):].lstrip(os.sep)
 
                     if file_path not in seen_paths:
                         seen_paths.add(file_path)
                         file_paths.append(file_path)
 
-    except Exception:
-        pass
+    except Exception as e:
+        debug_log(f"Error extracting file paths: {e}")
 
     return file_paths, last_line
 
 
-def group_files_by_directory(file_paths: list, cwd: str, excluded_dirs: list) -> dict:
-    """Group files by directory and count them."""
+def group_files_by_directory(file_paths: list, cwd: str, excluded_dirs: list, threshold: int = 2) -> tuple:
+    """Group files by directory with parent aggregation.
+
+    Files are grouped by their immediate parent directory first.
+    Then, sibling directories that individually fall below threshold
+    are aggregated into their common parent directory.
+
+    Returns:
+        Tuple of (dir_counts: dict, aggregation_info: dict)
+        - dir_counts maps directory path to file count
+        - aggregation_info maps parent dirs to {direct, from_children, child_count}
+    """
     dir_counts = defaultdict(int)
 
     for file_path in file_paths:
@@ -479,15 +482,56 @@ def group_files_by_directory(file_paths: list, cwd: str, excluded_dirs: list) ->
         dir_path = str(Path(file_path).parent)
 
         skip = False
+        path_parts = Path(dir_path).parts
         for excluded in excluded_dirs:
-            if excluded in dir_path:
+            if excluded in path_parts:
                 skip = True
                 break
 
         if not skip:
             dir_counts[dir_path] += 1
 
-    return dict(dir_counts)
+    # Parent aggregation: when multiple sibling dirs are below threshold,
+    # aggregate their counts into the parent directory.
+    # Built in a separate pass to avoid mutating dir_counts during iteration.
+    parent_overflow = defaultdict(int)
+    below_threshold_dirs = []
+
+    for dir_path, count in dir_counts.items():
+        if count < threshold:
+            parent = str(Path(dir_path).parent)
+            parent_overflow[parent] += count
+            below_threshold_dirs.append(dir_path)
+
+    # Build final result in a new dict
+    result = {}
+    aggregation_info = {}
+
+    # Keep dirs that are above threshold and NOT being aggregated into a parent
+    aggregated_children = set()
+    for parent, total in parent_overflow.items():
+        existing = dir_counts.get(parent, 0)
+        combined = existing + total
+
+        if combined >= threshold:
+            result[parent] = combined
+            child_count = sum(1 for d in below_threshold_dirs if str(Path(d).parent) == parent)
+            debug_log(f"  Parent aggregation: {parent} ({existing} direct + {total} from {child_count} subdirs = {combined} files)")
+            aggregation_info[parent] = {
+                'direct': existing,
+                'from_children': total,
+                'child_count': child_count
+            }
+            for child_dir in below_threshold_dirs:
+                if str(Path(child_dir).parent) == parent:
+                    aggregated_children.add(child_dir)
+
+    # Copy over all non-aggregated dirs
+    for dir_path, count in dir_counts.items():
+        if dir_path not in aggregated_children and dir_path not in result:
+            result[dir_path] = count
+
+    return result, aggregation_info
 
 
 def main():
@@ -523,16 +567,22 @@ def main():
         session_state = load_session_state(state_path)
         debug_log(f"Session state: last_line={session_state['last_processed_line']}, already_suggested={session_state['suggested_directories']}")
 
-        # Check if session appears complete
-        completion = check_session_completion(transcript_path)
+        # Check if session appears complete (using cached signals for incremental scanning)
+        completion = check_session_completion(transcript_path, cached=session_state.get('completion_cache'))
         debug_log(f"Completion check: is_complete={completion['is_complete']}, reason='{completion['reason']}'")
         debug_log(f"  - has_commit={completion['has_commit']}, has_test_success={completion['has_test_success']}")
         debug_log(f"  - has_build_success={completion['has_build_success']}, has_task_complete={completion['has_task_complete']}")
         debug_log(f"  - has_completion_phrase={completion['has_completion_phrase']}")
         debug_log(f"  - last_edit_index={completion['last_edit_index']}, total_entries={completion['total_entries']}")
 
+        # Always update completion cache in session state
+        if 'completion_cache' in completion:
+            session_state['completion_cache'] = completion['completion_cache']
+
         if not completion['is_complete']:
             debug_log(f"EXIT: Session not complete - {completion['reason']}")
+            # Save updated completion cache even when exiting early
+            save_session_state(state_path, session_state)
             sys.exit(0)
 
         # Extract file paths (only from new transcript entries)
@@ -548,11 +598,12 @@ def main():
             save_session_state(state_path, session_state)
             sys.exit(0)
 
-        # Group by directory
-        dir_counts = group_files_by_directory(
+        # Group by directory (with parent aggregation for cross-dir refactoring)
+        dir_counts, aggregation_info = group_files_by_directory(
             file_paths,
             cwd,
-            settings['excludedDirectories']
+            settings['excludedDirectories'],
+            settings['threshold']
         )
         debug_log(f"Directories with edits: {dict(dir_counts)}")
 
@@ -573,9 +624,9 @@ def main():
                 debug_log(f"  SKIP (already suggested): {dir_path}")
                 continue
 
-            if is_claude_md_recent(dir_path, cwd, settings['cooldownMinutes']):
+            if is_claude_md_recent(dir_path, cwd, settings['cooldownMinutes'], session_state):
                 skipped_dirs.append(dir_path)
-                debug_log(f"  SKIP (cooldown): {dir_path} - CLAUDE.md recently updated")
+                debug_log(f"  SKIP (cooldown): {dir_path} - CLAUDE.md recently generated")
                 continue
 
             candidate_dirs.append((dir_path, count))
@@ -594,24 +645,35 @@ def main():
 
         # Build output
         dirs_list = [dir_path for dir_path, _ in candidate_dirs]
-        summary_parts = [f"{dir_path} ({count} files)" for dir_path, count in candidate_dirs]
+
+        # Build summary with clear direct vs aggregated counts
+        summary_parts = []
+        for dir_path, count in candidate_dirs:
+            if dir_path in aggregation_info:
+                info = aggregation_info[dir_path]
+                summary_parts.append(
+                    f"{dir_path} ({info['direct']} direct + {info['from_children']} from {info['child_count']} subdirs)"
+                )
+            else:
+                summary_parts.append(f"{dir_path} ({count} files)")
         summary = ", ".join(summary_parts)
 
         debug_log(f"TRIGGER: Blocking stop with {len(candidate_dirs)} directories")
 
-        # Update session state with newly suggested directories
+        # Update session state with newly suggested directories and generation times
         session_state['suggested_directories'].extend(dirs_list)
+        now_iso = datetime.now().isoformat()
+        for dir_path in dirs_list:
+            session_state['generation_times'][dir_path] = now_iso
         save_session_state(state_path, session_state)
 
         reason = f"""Session complete ({completion['reason']}). Detected file changes in {summary}.
 
-Use the Task tool to spawn the local-memory:context-builder agent to build CLAUDE.md context files:
+Use the Task tool to spawn the context-builder agent to build CLAUDE.md context files:
 
-Task(
-  subagent_type="local-memory:context-builder",
-  description="Build CLAUDE.md context",
-  prompt="Build CLAUDE.md context files for the following directories: {json.dumps(dirs_list)}. Project root: {cwd}. Use the local-memory MCP tools (analyze_directory, generate_context, write_context) for each directory."
-)
+Task(local-memory:context-builder)
+
+Prompt the agent with: "Build CLAUDE.md context files for the following directories: {json.dumps(dirs_list)}. Project root: {cwd}. Use the local-memory MCP tools (analyze_directory, generate_context, write_context) for each directory."
 
 The context-builder agent has access to all local-memory MCP tools and will orchestrate the workflow automatically."""
 

@@ -231,11 +231,45 @@ For any tracked skill that was created via /evolve (check if any instinct has `e
 - {skill-name}: Evolved from {count} instincts ({date})
 ```
 
+### Step 9: Feedback Loop Report
+
+Check for skill-to-instinct feedback reinforcement data:
+
+For each tracked skill, check if any instinct has `evolved_to` matching the skill name AND `usage_reinforced: true`:
+
+**Add to report:**
+
+```
+### Feedback Loop
+```
+
+For each tracked skill:
+- Use Grep to search instinct files for `evolved_to: "{skill-name}"` in `.claude/md-to-skill-instincts/`
+- If matching instincts found, check for `usage_reinforcement_count` in their frontmatter
+- Report:
+```
+- {skill-name}: reinforced {count} source instincts ({instinct-ids}) — total {sum_reinforcement_count} reinforcements
+```
+- If no matching instincts:
+```
+- {skill-name}: no source instincts found (manually created or converted)
+```
+
+If no tracked skills have source instincts at all:
+```
+### Feedback Loop
+No skills with source instincts found. Skills created via /evolve will automatically reinforce their source instincts when used.
+```
+
 ## Related Commands
 
-- `/convert-to-skill <file>` - Convert markdown to skill
-- `/learn-skill [topic]` - Scan directory for skill candidates
+### Learning Commands (Primary)
 - `/observe` - Analyze observations and extract instincts
 - `/instinct-status` - View instinct report
 - `/evolve` - Cluster instincts into skills
 - `/instinct-prune` - Remove stale instincts
+- `/skill-health` - This command
+
+### Conversion Commands (Secondary)
+- `/convert-to-skill <file>` - Convert markdown to skill
+- `/learn-skill [topic]` - Scan directory for skill candidates

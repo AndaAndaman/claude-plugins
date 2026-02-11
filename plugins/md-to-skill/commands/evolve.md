@@ -16,6 +16,14 @@ Find related instincts that form a coherent skill, generate a combined markdown 
 
 ## Execution Workflow
 
+### Step 0: Load Configuration
+
+Read the plugin's `config/defaults.json` for threshold values. Then check `.claude/md-to-skill.local.md` for user overrides.
+
+Key config values:
+- `evolution.minClusterSize` (default: 3) — minimum instincts per cluster
+- `evolution.minAverageConfidence` (default: 0.5) — minimum average confidence
+
 ### Step 1: Load All Instincts
 
 Use Glob to find all instinct files:
@@ -24,11 +32,12 @@ Use Glob to find all instinct files:
 ```
 
 For each file, parse YAML frontmatter to extract:
-- `id`, `trigger`, `confidence`, `domain`, `observations`, `evolved`
+- `id`, `trigger`, `confidence`, `domain`, `observations`, `evolved`, `source`, `auto_approved`
 
 **Skip instincts with `evolved: true`** — they've already been converted.
+**Skip inherited instincts** (`source: "inherited"`) — only personal instincts evolve.
 
-If fewer than 3 non-evolved instincts exist:
+If fewer than `evolution.minClusterSize` non-evolved personal instincts exist:
 ```
 Not enough instincts to form clusters yet.
 You have {count} instincts. Clusters need at least 3 related instincts.
@@ -49,8 +58,15 @@ Group instincts by their `domain` tag:
 ### Step 3: Filter Viable Clusters
 
 A cluster is viable when:
-- **3+ instincts** in the group
-- **Average confidence >= 0.5**
+- **`evolution.minClusterSize`+ instincts** in the group (default: 3)
+- **Average confidence >= `evolution.minAverageConfidence`** (default: 0.5)
+
+**Priority:**
+1. Clusters containing auto-approved instincts are prioritized first
+2. When multiple clusters are viable, prioritize those with higher average session diversity (instincts observed across 3+ sessions indicate more consistent patterns)
+3. Note in presentation: "Priority: Clusters with instincts observed across 3+ sessions"
+
+To calculate session diversity for a cluster: average the `sessions` array length across all instincts in the cluster (treat missing `sessions` as length 1).
 
 Discard clusters that don't meet both criteria.
 

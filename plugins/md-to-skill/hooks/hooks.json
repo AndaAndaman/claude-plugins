@@ -1,6 +1,18 @@
 {
-  "description": "md-to-skill hooks - watch for markdown changes and track skill usage",
+  "description": "md-to-skill hooks - continuous learning observation, skill usage tracking, markdown detection, and instinct suggestions",
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/instinct-suggest_pretooluse.py\"",
+            "timeout": 3000
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [
@@ -29,6 +41,26 @@
           {
             "type": "command",
             "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/observe_posttooluse.py\"",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/quickwins-bridge_posttooluse.py\"",
+            "timeout": 3000
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/clarification-bridge_posttooluse.py\"",
             "timeout": 3000
           }
         ]

@@ -57,8 +57,8 @@
     },
     {
       "name": "md-to-skill",
-      "version": "0.4.0",
-      "description": "Convert LLM-generated markdown files into organized Claude skills with automatic structure analysis, quality validation, batch processing with smart defaults, intelligent content merging, continuous learning via usage tracking, and instinct-based pattern detection from session observations.",
+      "version": "0.6.0",
+      "description": "Continuous learning engine for Claude Code. Observes coding patterns, builds instincts from repeated behaviors, and evolves validated instincts into reusable skills. Also converts markdown into organized Claude skills.",
       "source": "./plugins/md-to-skill",
       "author": {
         "name": "FlowAccount Developer",

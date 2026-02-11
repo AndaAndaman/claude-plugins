@@ -3,6 +3,7 @@ name: instinct-prune
 description: Remove stale or low-confidence instincts
 allowed-tools:
   - Read
+  - Write
   - Glob
   - Bash
   - AskUserQuestion
@@ -13,6 +14,16 @@ allowed-tools:
 Identify and remove stale or low-confidence instincts that are no longer useful.
 
 ## Execution Workflow
+
+### Step 0: Load Configuration
+
+Read the plugin's `config/defaults.json` for threshold values. Then check `.claude/md-to-skill.local.md` for user overrides.
+
+Key config values:
+- `instincts.pruneThresholds.autoRemoveConfidence` (default: 0.2)
+- `instincts.pruneThresholds.autoRemoveStalenessDays` (default: 60)
+- `instincts.pruneThresholds.reviewConfidence` (default: 0.3)
+- `instincts.pruneThresholds.reviewStalenessDays` (default: 30)
 
 ### Step 1: Load All Instincts
 
@@ -32,14 +43,17 @@ Exit.
 For each instinct, parse frontmatter and check:
 
 **Auto-prune candidates** (recommended for removal):
-- Confidence < 0.2 (very weak, likely noise)
-- Last seen > 60 days ago (abandoned patterns)
+- Confidence < `pruneThresholds.autoRemoveConfidence` (default: 0.2, very weak, likely noise)
+- Last seen > `pruneThresholds.autoRemoveStalenessDays` (default: 60 days, abandoned patterns)
 
 **Review candidates** (user should decide):
-- Confidence < 0.3 AND last seen > 30 days ago
+- Confidence < `pruneThresholds.reviewConfidence` AND last seen > `pruneThresholds.reviewStalenessDays`
 - Observations count = 1 AND created > 14 days ago (single observation that was never reinforced)
 
-Skip instincts with `evolved: true` — they are preserved as historical record.
+**Protected instincts** (never prune):
+- Instincts with `evolved: true` — preserved as historical record
+- Instincts with `source: "inherited"` — team/project baselines
+- Instincts with `auto_approved: true` — validated patterns (unless user explicitly overrides)
 
 ### Step 3: Present Candidates
 

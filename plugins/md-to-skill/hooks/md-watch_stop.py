@@ -7,15 +7,15 @@ When the session appears complete, suggests /convert-to-skill for qualifying fil
 
 Decision Logic:
 1. Read stdin for hook input (cwd, transcript_path)
-2. Guard: if stop_hook_active → exit (prevent infinite loop)
-3. Load settings from .claude/md-to-skill.local.md
+2. Guard: if stop_hook_active -> exit (prevent infinite loop)
+3. Load config from centralized config_loader
 4. Load session state (.claude/md-to-skill-state-{hash}.json)
 5. Parse transcript for Write tool operations on .md files (incremental)
 6. Filter out known non-skill files (README.md, CHANGELOG.md, etc.)
 7. Filter out files inside skill directories
 8. Filter out files already suggested this session
 9. Lightweight checks: file exists, >minWords words, has headings
-10. If candidates found → block stop with suggestion
+10. If candidates found -> block stop with suggestion
 11. Save session state
 """
 
@@ -27,21 +27,23 @@ import hashlib
 from pathlib import Path
 from datetime import datetime
 
+# Add plugin root to sys.path for config imports
+PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PLUGIN_ROOT not in sys.path:
+    sys.path.insert(0, PLUGIN_ROOT)
+
+try:
+    from config.config_loader import (
+        load_config, get_watch_config, get_observer_config, get_instinct_config
+    )
+    CONFIG_AVAILABLE = True
+except ImportError:
+    CONFIG_AVAILABLE = False
+
 
 # Global debug state
 DEBUG_ENABLED = False
 DEBUG_LOG_PATH = None
-
-# Default settings
-DEFAULT_WATCH_ENABLED = True
-DEFAULT_MIN_WORDS = 200
-DEFAULT_DEBUG = False
-DEFAULT_EXCLUDE_PATTERNS = [
-    'README.md',
-    'CHANGELOG.md',
-    'LICENSE.md',
-    'CLAUDE.md',
-]
 
 
 def debug_log(message: str):
@@ -56,14 +58,14 @@ def debug_log(message: str):
         pass
 
 
-def init_debug(cwd: str, settings: dict):
-    """Initialize debug mode based on settings or environment."""
+def init_debug(cwd: str, debug_flag: bool):
+    """Initialize debug mode based on config or environment."""
     global DEBUG_ENABLED, DEBUG_LOG_PATH
 
     if os.environ.get('MD_TO_SKILL_DEBUG', '').lower() in ('1', 'true', 'yes'):
         DEBUG_ENABLED = True
 
-    if settings.get('debug', False):
+    if debug_flag:
         DEBUG_ENABLED = True
 
     if DEBUG_ENABLED:
@@ -111,59 +113,6 @@ def save_session_state(state_path: str, state: dict):
             json.dump(state, f, indent=2)
     except Exception as e:
         debug_log(f"Failed to save session state: {e}")
-
-
-def load_settings(cwd: str) -> dict:
-    """Load settings from .claude/md-to-skill.local.md YAML frontmatter."""
-    settings = {
-        'watchEnabled': DEFAULT_WATCH_ENABLED,
-        'minWords': DEFAULT_MIN_WORDS,
-        'debug': DEFAULT_DEBUG,
-        'excludePatterns': DEFAULT_EXCLUDE_PATTERNS.copy()
-    }
-
-    settings_file = Path(cwd) / '.claude' / 'md-to-skill.local.md'
-
-    if not settings_file.exists():
-        return settings
-
-    try:
-        with open(settings_file, 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        match = re.search(r'^---\s*\n(.*?)\n---', content, re.DOTALL | re.MULTILINE)
-        if not match:
-            return settings
-
-        frontmatter = match.group(1)
-
-        # Extract watchEnabled
-        watch_match = re.search(r'watchEnabled:\s*(true|false)', frontmatter, re.IGNORECASE)
-        if watch_match:
-            settings['watchEnabled'] = watch_match.group(1).lower() == 'true'
-
-        # Extract minWords
-        min_words_match = re.search(r'minWords:\s*(\d+)', frontmatter)
-        if min_words_match:
-            settings['minWords'] = int(min_words_match.group(1))
-
-        # Extract debug
-        debug_match = re.search(r'debug:\s*(true|false)', frontmatter, re.IGNORECASE)
-        if debug_match:
-            settings['debug'] = debug_match.group(1).lower() == 'true'
-
-        # Extract excludePatterns
-        exclude_match = re.search(r'excludePatterns:\s*\n((?:\s+-\s+.+\n?)+)', frontmatter)
-        if exclude_match:
-            exclude_list = exclude_match.group(1)
-            patterns = re.findall(r'^\s+-\s+(.+)$', exclude_list, re.MULTILINE)
-            if patterns:
-                settings['excludePatterns'] = [p.strip() for p in patterns]
-
-    except Exception:
-        pass
-
-    return settings
 
 
 def extract_md_file_paths(transcript_path: str, cwd: str, start_line: int = 0) -> tuple:
@@ -349,12 +298,7 @@ def check_file_quality(file_path: str, cwd: str, min_words: int) -> dict:
 
 
 def count_observations_since_last_analysis(cwd: str) -> int:
-    """Count observation entries in JSONL file since last /observe run.
-
-    Returns the total entry count (simple heuristic — a more precise approach
-    would track a 'last_analyzed_line' counter, but total count works for the
-    '>50 new entries' threshold).
-    """
+    """Count observation entries in JSONL file since last /observe run."""
     obs_path = os.path.join(cwd, '.claude', 'md-to-skill-observations.jsonl')
     if not os.path.exists(obs_path):
         return 0
@@ -365,6 +309,33 @@ def count_observations_since_last_analysis(cwd: str) -> int:
             for line in f:
                 if line.strip():
                     count += 1
+        return count
+    except Exception:
+        return 0
+
+
+def count_auto_approved_instincts(cwd: str, threshold: float) -> int:
+    """Count instincts with auto_approved: true in the instincts directory."""
+    instincts_dir = os.path.join(cwd, '.claude', 'md-to-skill-instincts')
+    if not os.path.isdir(instincts_dir):
+        return 0
+
+    try:
+        count = 0
+        for filename in os.listdir(instincts_dir):
+            if not filename.endswith('.md'):
+                continue
+            filepath = os.path.join(instincts_dir, filename)
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    content = f.read(2000)  # Only need frontmatter
+                match = re.search(r'^---\s*\n(.*?)\n---', content, re.DOTALL | re.MULTILINE)
+                if match:
+                    fm = match.group(1)
+                    if re.search(r'auto_approved:\s*true', fm, re.IGNORECASE):
+                        count += 1
+            except Exception:
+                continue
         return count
     except Exception:
         return 0
@@ -385,14 +356,29 @@ def main():
         if not transcript_path:
             sys.exit(0)
 
-        # Load settings
-        settings = load_settings(cwd)
+        # Load config (centralized or fallback)
+        if CONFIG_AVAILABLE:
+            config = load_config(cwd)
+            watch_cfg = get_watch_config(config)
+            observer_cfg = get_observer_config(config)
+            instinct_cfg = get_instinct_config(config)
+            debug_flag = config.get('debug', False)
+        else:
+            watch_cfg = {
+                'enabled': True,
+                'minWords': 200,
+                'excludePatterns': ['README.md', 'CHANGELOG.md', 'LICENSE.md', 'CLAUDE.md'],
+                'observeSuggestionThreshold': 50,
+            }
+            observer_cfg = {'enabled': True}
+            instinct_cfg = {'autoApproveThreshold': 0.7}
+            debug_flag = False
 
         # Initialize debug mode
-        init_debug(cwd, settings)
-        debug_log(f"Settings: watchEnabled={settings['watchEnabled']}, minWords={settings['minWords']}")
+        init_debug(cwd, debug_flag)
+        debug_log(f"Config: watchEnabled={watch_cfg.get('enabled')}, minWords={watch_cfg.get('minWords')}")
 
-        if not settings['watchEnabled']:
+        if not watch_cfg.get('enabled', True):
             debug_log("EXIT: watchEnabled=False (disabled)")
             sys.exit(0)
 
@@ -411,15 +397,37 @@ def main():
             debug_log("EXIT: No new .md file writes found")
             session_state['last_processed_line'] = last_line
             save_session_state(state_path, session_state)
+
+            # Still check for observation accumulation even without .md candidates
+            observe_enabled = observer_cfg.get('enabled', True)
+            if observe_enabled:
+                obs_threshold = watch_cfg.get('observeSuggestionThreshold', 50)
+                obs_count = count_observations_since_last_analysis(cwd)
+                if obs_count > obs_threshold:
+                    auto_threshold = instinct_cfg.get('autoApproveThreshold', 0.7)
+                    auto_count = count_auto_approved_instincts(cwd, auto_threshold)
+                    auto_hint = ""
+                    if auto_count > 0:
+                        auto_hint = f" ({auto_count} instincts above auto-approve threshold)"
+
+                    debug_log(f"TRIGGER: Blocking stop for instinct suggestion ({obs_count} observations{auto_hint})")
+                    result = {
+                        'decision': 'block',
+                        'reason': f"{obs_count} tool use observations have accumulated{auto_hint}.\nRun /observe to analyze patterns and extract instincts."
+                    }
+                    print(json.dumps(result))
             sys.exit(0)
 
         # Filter candidates
+        exclude_patterns = watch_cfg.get('excludePatterns', ['README.md', 'CHANGELOG.md', 'LICENSE.md', 'CLAUDE.md'])
+        min_words = watch_cfg.get('minWords', 200)
+
         candidates = []
         for file_path in md_paths:
             debug_log(f"Checking: {file_path}")
 
             # Skip excluded files
-            if is_excluded_file(file_path, settings['excludePatterns']):
+            if is_excluded_file(file_path, exclude_patterns):
                 debug_log(f"  SKIP (excluded pattern): {file_path}")
                 continue
 
@@ -434,7 +442,7 @@ def main():
                 continue
 
             # Quality check
-            quality = check_file_quality(file_path, cwd, settings['minWords'])
+            quality = check_file_quality(file_path, cwd, min_words)
             if not quality['passes']:
                 debug_log(f"  SKIP (quality): {file_path} - {quality['reason']}")
                 continue
@@ -449,20 +457,27 @@ def main():
         session_state['last_processed_line'] = last_line
 
         # Check for accumulated observations (instinct suggestion)
-        observe_enabled = settings.get('observeEnabled', True)
+        observe_enabled = observer_cfg.get('enabled', True)
         obs_count = 0
         instinct_suggestion = ""
 
         if observe_enabled:
+            obs_threshold = watch_cfg.get('observeSuggestionThreshold', 50)
             obs_count = count_observations_since_last_analysis(cwd)
-            debug_log(f"Observation count: {obs_count}")
+            debug_log(f"Observation count: {obs_count} (threshold: {obs_threshold})")
 
-            if obs_count > 50:
+            if obs_count > obs_threshold:
+                auto_threshold = instinct_cfg.get('autoApproveThreshold', 0.7)
+                auto_count = count_auto_approved_instincts(cwd, auto_threshold)
+                auto_hint = ""
+                if auto_count > 0:
+                    auto_hint = f" ({auto_count} instincts above auto-approve threshold)"
+
                 instinct_suggestion = f"""
 
 ---
 
-Also: {obs_count} tool use observations have accumulated.
+Also: {obs_count} tool use observations have accumulated{auto_hint}.
 Run /observe to analyze patterns and extract instincts."""
 
         if not candidates:
@@ -472,9 +487,15 @@ Run /observe to analyze patterns and extract instincts."""
             # Even without .md candidates, suggest /observe if observations accumulated
             if instinct_suggestion:
                 debug_log("TRIGGER: Blocking stop for instinct suggestion only")
+                auto_threshold = instinct_cfg.get('autoApproveThreshold', 0.7)
+                auto_count = count_auto_approved_instincts(cwd, auto_threshold)
+                auto_hint = ""
+                if auto_count > 0:
+                    auto_hint = f" ({auto_count} instincts above auto-approve threshold)"
+
                 result = {
                     'decision': 'block',
-                    'reason': f"{obs_count} tool use observations have accumulated.\nRun /observe to analyze patterns and extract instincts."
+                    'reason': f"{obs_count} tool use observations have accumulated{auto_hint}.\nRun /observe to analyze patterns and extract instincts."
                 }
                 print(json.dumps(result))
             sys.exit(0)

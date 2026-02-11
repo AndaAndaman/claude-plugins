@@ -13,6 +13,16 @@ Display all learned instincts with confidence scores, domain tags, observation c
 
 ## Execution Workflow
 
+### Step 0: Load Configuration
+
+Read the plugin's `config/defaults.json` for threshold values. Then check `.claude/md-to-skill.local.md` for user overrides.
+
+Key config values:
+- `instincts.autoApproveThreshold` (default: 0.7) — auto-approve confidence level
+- `instincts.confidenceDecay.gracePeriodDays` (default: 14) — days before decay starts
+- `instincts.confidenceDecay.decayPerWeek` (default: 0.05) — weekly decay rate
+- `instincts.confidenceDecay.minimumConfidence` (default: 0.1) — decay floor
+
 ### Step 1: Load Instincts
 
 Use Glob to find all instinct files:
@@ -34,21 +44,24 @@ Exit.
 For each instinct file, parse YAML frontmatter to extract:
 - `id` — Instinct identifier
 - `trigger` — When condition
-- `confidence` — Current confidence score (0.0-0.9)
+- `confidence` — Current confidence score (0.0-0.95)
 - `domain` — Domain tag
-- `source` — How it was created
+- `source` — How it was created ("session-observation", "inherited", "imported")
 - `created` — Creation timestamp
 - `last_seen` — Last observation timestamp
 - `observations` — Total observation count
 - `evolved` — Whether it has been evolved into a skill (optional)
+- `auto_approved` — Whether auto-approved at high confidence (optional)
+- `sessions` — Array of session IDs that contributed observations (optional)
 
 ### Step 3: Apply Confidence Decay
 
-For each instinct, calculate staleness:
+For each instinct, calculate staleness using config values:
 - Parse `last_seen` timestamp
 - Calculate days since last seen
-- If > 14 days: subtract 0.05 per week elapsed (minimum 0.1)
+- If > `confidenceDecay.gracePeriodDays` (default 14): subtract `confidenceDecay.decayPerWeek` per week elapsed (minimum `confidenceDecay.minimumConfidence`)
 - Store decayed confidence for display (do NOT write back to file — decay is display-only)
+- **Auto-approved instincts** decay at half rate (they represent validated patterns)
 
 Example: confidence 0.6, last seen 28 days ago → 2 weeks of decay → 0.6 - 0.10 = 0.5
 
@@ -72,9 +85,17 @@ Group instincts into categories based on decayed confidence:
 - May need pruning
 - Display with pruning suggestion
 
+**Auto-Approved** (auto_approved: true, confidence >= autoApproveThreshold):
+- Validated patterns, actively applied in sessions
+- Display with emphasis on their active status
+
 **Evolved** (evolved: true in frontmatter):
 - Already converted to full skills
 - Display separately with link to skill
+
+**Inherited** (source: "inherited"):
+- Read-only instincts from team/project configuration
+- Display separately as baseline patterns
 
 ### Step 5: Display Report
 
@@ -86,16 +107,23 @@ Output the report:
 **Total:** {count} instincts across {domain_count} domains
 **Observations file:** {size} ({entry_count} entries)
 
-### Strong ({count})
-- {id} ({confidence}) [{domain}] — {observations} observations, last seen {relative_time}
+### Auto-Approved ({count})
+- {id} ({confidence}) [{domain}] — {observations} observations, auto-approved {date}
   Trigger: "{trigger}"
+  Status: Active in sessions
+
+### Strong ({count})
+- {id} ({confidence}) [{domain}] — {observations} observations across {session_count} sessions, last seen {relative_time}
+  Trigger: "{trigger}"
+  Consistency: {session_count >= 3 ? "consistent" : "limited data"}
 
 ### Growing ({count})
-- {id} ({confidence}) [{domain}] — {observations} observations, last seen {relative_time}
+- {id} ({confidence}) [{domain}] — {observations} observations across {session_count} sessions, last seen {relative_time}
   Trigger: "{trigger}"
+  Consistency: {session_count >= 3 ? "consistent" : "limited data"}
 
 ### Tentative ({count})
-- {id} ({confidence}) [{domain}] — {observations} observations, last seen {relative_time}
+- {id} ({confidence}) [{domain}] — {observations} observations across {session_count} sessions, last seen {relative_time}
   Trigger: "{trigger}"
   Needs more observations to strengthen.
 
@@ -106,6 +134,11 @@ Output the report:
 ### Evolved ({count})
 - {id} → evolved into skill "{skill-name}"
 
+### Inherited ({count})
+- {id} ({confidence}) [{domain}] — team/project baseline
+  Trigger: "{trigger}"
+  Source: read-only, not modified by /observe
+
 ### Domain Summary
 | Domain | Count | Avg Confidence |
 |--------|-------|---------------|
@@ -113,10 +146,14 @@ Output the report:
 | testing | 3 | 0.70 |
 | workflow | 2 | 0.45 |
 
+### Configuration
+auto-approve >= {autoApproveThreshold} | decay: {decayPerWeek}/week after {gracePeriodDays}d | max: {maxInstincts} instincts
+
 ### Recommendations
 - {If clusters ready:} Run /evolve — {domain} has {count} instincts ready to become a skill
 - {If stale:} Run /instinct-prune — {count} stale instincts could be removed
 - {If few instincts:} Keep working! More observations will strengthen existing instincts
+- {If near autoApprove:} {count} instincts close to auto-approve (>= 0.6) — a few more sessions could validate them
 ```
 
 ### Step 6: Show Observations Summary

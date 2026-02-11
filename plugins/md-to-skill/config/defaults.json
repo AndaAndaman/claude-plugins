@@ -1,0 +1,57 @@
+{
+  "version": "0.6.0",
+  "observer": {
+    "enabled": true,
+    "maxObservationsMB": 10,
+    "capturePatterns": {
+      "userCorrections": true,
+      "errorResolutions": true,
+      "repeatedWorkflows": true,
+      "toolPreferences": true,
+      "fileNamingConventions": true,
+      "importPatterns": false
+    },
+    "excludeTools": [],
+    "excludePathPatterns": ["node_modules", ".git", "dist", "build"]
+  },
+  "instincts": {
+    "initialConfidence": 0.3,
+    "confidenceIncrement": 0.1,
+    "maxConfidence": 0.95,
+    "autoApproveThreshold": 0.7,
+    "confidenceDecay": {
+      "enabled": true,
+      "gracePeriodDays": 14,
+      "decayPerWeek": 0.05,
+      "minimumConfidence": 0.1
+    },
+    "maxInstincts": 100,
+    "pruneThresholds": {
+      "autoRemoveConfidence": 0.2,
+      "autoRemoveStalenessDays": 60,
+      "reviewConfidence": 0.3,
+      "reviewStalenessDays": 30
+    }
+  },
+  "evolution": {
+    "minClusterSize": 3,
+    "minAverageConfidence": 0.5
+  },
+  "watch": {
+    "enabled": true,
+    "minWords": 200,
+    "excludePatterns": ["README.md", "CHANGELOG.md", "LICENSE.md", "CLAUDE.md"],
+    "observeSuggestionThreshold": 50
+  },
+  "privacy": {
+    "neverCaptureContent": true,
+    "maxCommandPreviewLength": 200,
+    "excludeSecretFiles": [".env", ".env.*", "credentials.*", "*.key", "*.pem"]
+  },
+  "integration": {
+    "quickWinsEnabled": true,
+    "askBeforeCodeEnabled": true,
+    "localMemoryExportEnabled": true
+  },
+  "debug": false
+}

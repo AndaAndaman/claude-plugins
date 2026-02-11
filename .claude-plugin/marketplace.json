@@ -77,8 +77,8 @@
     },
     {
       "name": "feature-sprint",
-      "version": "0.2.0",
-      "description": "One iteration MVP development with true parallel analysis. Commands spawn Scout, Guard, and Tester agents directly for guaranteed parallelization.",
+      "version": "0.3.0",
+      "description": "Full-lifecycle feature development using Agent Teams. Analysts discuss and challenge each other, then Implementers execute in parallel with code review.",
       "source": "./plugins/feature-sprint",
       "author": {
         "name": "FlowAccount Developer",

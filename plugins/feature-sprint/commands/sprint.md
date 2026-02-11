@@ -1,6 +1,6 @@
 ---
 name: sprint
-description: "Quick MVP feature development with parallel analysis. Spawns Scout, Guard, and Tester agents to create an implementation brief, then implements the feature."
+description: "Full-lifecycle MVP feature development using Agent Teams. Analysts discuss and challenge, implementers execute in parallel, reviewer verifies quality."
 arguments:
   - name: feature
     description: "Short description of the feature to implement"
@@ -16,73 +16,90 @@ allowed-tools:
   - Write
   - Edit
   - Bash
+  - TeamCreate
+  - TeamDelete
+  - TaskCreate
+  - TaskList
+  - TaskGet
+  - TaskUpdate
+  - SendMessage
+  - AskUserQuestion
 ---
 
-# Sprint Command
+# Sprint Command - Team Lead
 
-Execute a quick MVP feature development sprint with parallel analysis.
+You are the **sprint team lead**. You orchestrate a full feature development lifecycle using Agent Teams.
 
 **Feature**: {{ feature }}
 **Plan Only**: {{ plan-only | default: false }}
 
-## Execution Steps
-
-### Step 1: Parallel Analysis
-
-**CRITICAL**: You MUST spawn all 3 agents in a SINGLE message with multiple Task tool calls. This ensures true parallel execution.
+## Phase 1: Create Team & Analysis Tasks
 
 ```
-🔍 Analyzing feature: "{{ feature }}"
-   ├─ 🗺️ Scout: Finding location...
-   ├─ 🛡️ Guard: Checking risks...
-   └─ ✅ Tester: Defining verification...
+Creating sprint team for: "{{ feature }}"
 ```
 
-**In ONE message, call all three:**
-
+**Create the team:**
 ```
-Task(feature-sprint:scout)
-  prompt: "Scout the codebase for: {{ feature }}
-           Find: target file, related files (max 3), pattern to follow.
-           Return a Location Brief."
-
-Task(feature-sprint:guard)
-  prompt: "Identify risks for: {{ feature }}
-           Find: max 3 critical risks with mitigations.
-           Return a Risk Brief."
-
-Task(feature-sprint:tester)
-  prompt: "Define test strategy for: {{ feature }}
-           Find: manual verification steps (max 5), one automated test suggestion.
-           Return a Test Brief."
+TeamCreate(team_name: "sprint", description: "Sprint: {{ feature }}")
 ```
 
-Wait for all three to complete before proceeding.
+**Create 3 analysis tasks** using TaskCreate:
 
-### Step 2: Synthesize Implementation Brief
+1. **Scout task**: "Scout codebase for {{ feature }}" - Find target files, patterns, related code
+2. **Guard task**: "Guard risks for {{ feature }}" - Identify risks and mitigations
+3. **Tester task**: "Define tests for {{ feature }}" - Manual verification and test strategy
 
-After receiving all 3 briefs, combine them into this format:
+Each task description should include the full feature context: `{{ feature }}`
+
+## Phase 2: Spawn Analysts (Parallel)
+
+**CRITICAL**: Spawn all 3 agents in a SINGLE message with multiple Task tool calls.
+
+```
+Analyzing: "{{ feature }}"
+  Scout: Finding location...
+  Guard: Checking risks...
+  Tester: Defining verification...
+```
+
+Spawn each with:
+- `team_name: "sprint"`
+- `name: "scout"`, `"guard"`, `"tester"` respectively
+- `subagent_type: "feature-sprint:scout"`, `"feature-sprint:guard"`, `"feature-sprint:tester"`
+- Prompt: Include the feature description and tell them to claim their task from TaskList
+
+Example prompt for scout:
+```
+Feature: "{{ feature }}"
+You are working in a sprint team. Check TaskList for your analysis task, claim it,
+perform your analysis, and message the team lead with your Location Brief.
+Also check if other analysts have findings you can cross-reference.
+```
+
+**Wait for all 3 to complete.** They may message each other during analysis to discuss and challenge findings.
+
+## Phase 3: Synthesize Brief
+
+After all analysts complete, read their task outputs and messages. Synthesize into:
 
 ```markdown
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 IMPLEMENTATION BRIEF: [Feature Name]
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+IMPLEMENTATION BRIEF: [Feature Name]
 
-## 📍 Location (from Scout)
+## Location (from Scout)
 **Target**: `[primary file path]`
 **Type**: [Create New | Modify Existing]
 **Pattern**: Follow `[reference file]`
 
 Related Files:
-• `[file1]` - [why]
-• `[file2]` - [why]
+- `[file1]` - [why]
+- `[file2]` - [why]
 
-## ⚠️ Risks (from Guard)
-1. **[Risk]** - [Mitigation]
-2. **[Risk]** - [Mitigation]
-3. **[Risk]** - [Mitigation]
+## Risks (from Guard)
+1. **[Risk]** [HIGH/MEDIUM] - Mitigation: [how]
+2. **[Risk]** [HIGH/MEDIUM] - Mitigation: [how]
 
-## ✅ Verification (from Tester)
+## Verification (from Tester)
 Manual:
 - [ ] [Step 1]
 - [ ] [Step 2]
@@ -90,51 +107,144 @@ Manual:
 
 Automated: `[test file suggestion]`
 
-## 🔧 Implementation Checklist
-1. [ ] [First task based on location + risks]
-2. [ ] [Second task]
-3. [ ] [Third task]
+## Implementation Checklist
+1. [ ] [Task based on location + risks]
+2. [ ] [Task]
+3. [ ] [Task]
 4. [ ] Run verification
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-### Step 3: User Decision
+**Shutdown analysts** to save tokens - send shutdown_request to scout, guard, tester.
+
+## Phase 4: User Approval
+
+Present the brief to the user.
 
 If `--plan-only` is true:
-- Present the brief and STOP
-- Do not ask about implementation
+- Present the brief, cleanup the team (TeamDelete), and STOP
+- Do NOT ask about implementation
 
-Otherwise, ask:
+Otherwise, ask using AskUserQuestion:
 ```
-Ready to implement? [Y/n]
+Ready to implement this feature?
+- "Yes, implement" (Recommended)
+- "No, just the plan"
 ```
 
-### Step 4: Implementation (if approved)
+If user says no: cleanup and stop.
 
-Follow the implementation checklist:
-1. Read the target file (if modifying) or pattern reference file
-2. Make changes following the identified pattern
-3. Address each risk's mitigation during implementation
-4. After code is written, guide through manual verification steps
-5. Suggest running the automated test
+## Phase 5: Scope Split
+
+Analyze the brief to divide work into packages by **file ownership**:
+
+**Sizing rules:**
+- **1 target file** → 1 implementer
+- **2-3 files in different modules** → 2 implementers
+- **4+ files or cross-layer changes** → 3 implementers
+
+**Each package gets:**
+- Exclusive file list (no overlap between packages)
+- Relevant subset of risks/mitigations
+- Pattern reference
+- Brief context
+
+Create implementation tasks with TaskCreate. Each task description includes:
+```markdown
+## Work Package for implementer-N
+
+**Files (exclusive)**:
+- `path/to/file1.ts`
+- `path/to/file2.ts`
+
+**Pattern**: Follow `path/to/reference.ts`
+
+**Risk Mitigations to Apply**:
+- [Risk]: [Mitigation]
+
+**Feature Context**: {{ feature }}
+
+**Full Brief**: [embed the synthesized brief]
+```
+
+## Phase 6: Spawn Implementers (Parallel)
+
+**CRITICAL**: Spawn all implementers in a SINGLE message.
+
+```
+Implementing: "{{ feature }}"
+  implementer-1: [files]
+  implementer-2: [files]
+```
+
+Spawn each with:
+- `team_name: "sprint"`
+- `name: "implementer-1"`, `"implementer-2"`, etc.
+- `subagent_type: "feature-sprint:implementer"`
+- Prompt: Tell them to check TaskList, claim their task, implement their work package
+
+Wait for all implementers to complete.
+
+## Phase 7: Code Review
+
+Create a review task with TaskCreate containing:
+- The full implementation brief
+- List of all implementer tasks and their files
+
+Spawn reviewer:
+- `team_name: "sprint"`
+- `name: "reviewer"`
+- `subagent_type: "feature-sprint:reviewer"`
+- Prompt: Check TaskList for review task, review all implemented code against the brief
+
+Wait for reviewer to complete and send their report.
+
+## Phase 8: Handle Review Results
+
+If reviewer reports **APPROVED**:
+- Present success to user with summary of changes
+- Guide through manual verification steps from the brief
+
+If reviewer reports **NEEDS CHANGES**:
+- Present issues to user
+- Ask if they want to fix manually or re-run implementers on the flagged files
+
+## Phase 9: Cleanup
+
+1. **Shutdown all remaining teammates** - Send shutdown_request to each active agent
+2. **Delete team** - Use TeamDelete to clean up team and task files
+3. **Present final summary**:
+
+```
+Sprint Complete: "{{ feature }}"
+  Files changed: [list]
+  Risks mitigated: [count]
+  Review: [APPROVED/NEEDS CHANGES]
+  Next: Run manual verification steps above
+```
 
 ## Error Handling
 
-If any agent fails or returns incomplete results:
-- Note which perspective is missing in the brief
-- Proceed with available information
-- Flag the gap clearly
+- If an analyst fails: proceed with available analysis, note the gap
+- If an implementer fails: present partial results, suggest manual completion
+- If reviewer fails: skip review, present implementation summary directly
+- Always cleanup the team, even on failure
 
-## Examples
+## Team Lifecycle Summary
 
-```bash
-# Full sprint: analyze + implement
-/sprint "Add logout button to header menu"
-
-# Analysis only: get implementation brief
-/sprint "Add dark mode toggle" --plan-only
-
-# Shorthand for plan-only
-/sprint-plan "Add email validation to signup form"
+```
+/sprint "feature"
+    |
+    |-- Phase 1-2: Create team, spawn Scout + Guard + Tester
+    |   (analysts discuss & challenge each other)
+    |
+    |-- Phase 3: Synthesize brief, shutdown analysts
+    |
+    |-- Phase 4: Present brief, get user approval
+    |
+    |-- Phase 5-6: Split scope, spawn implementers
+    |   (implementers coordinate interface contracts)
+    |
+    |-- Phase 7-8: Spawn reviewer, handle results
+    |
+    |-- Phase 9: Cleanup team
 ```

@@ -384,7 +384,7 @@ After showing the summary (and not in `--patterns` dry-run mode), write updated 
 }
 ```
 
-This ensures the next `/observe` run only processes new observations since this point.
+This ensures the stop hook only counts observations **after** this timestamp, so the counter resets to 0 after `/observe` — even if the user skips all instincts. The observations file is preserved for `--replay`.
 
 **Skip this step if:**
 - `--patterns` mode (dry run should not update state)

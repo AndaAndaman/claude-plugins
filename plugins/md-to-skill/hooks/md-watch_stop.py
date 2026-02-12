@@ -298,17 +298,37 @@ def check_file_quality(file_path: str, cwd: str, min_words: int) -> dict:
 
 
 def count_observations_since_last_analysis(cwd: str) -> int:
-    """Count observation entries in JSONL file since last /observe run."""
+    """Count observation entries since last /observe run, using state file timestamp."""
     obs_path = os.path.join(cwd, '.claude', 'md-to-skill-observations.jsonl')
     if not os.path.exists(obs_path):
         return 0
+
+    # Read last analyzed timestamp from state file
+    last_ts = None
+    state_path = os.path.join(cwd, '.claude', 'md-to-skill-observe-state.json')
+    try:
+        if os.path.exists(state_path):
+            with open(state_path, 'r', encoding='utf-8') as f:
+                state = json.loads(f.read())
+                last_ts = state.get('last_analyzed_timestamp')
+    except Exception:
+        pass
 
     try:
         count = 0
         with open(obs_path, 'r', encoding='utf-8') as f:
             for line in f:
-                if line.strip():
-                    count += 1
+                line = line.strip()
+                if not line:
+                    continue
+                if last_ts:
+                    try:
+                        entry = json.loads(line)
+                        if entry.get('timestamp', '') <= last_ts:
+                            continue
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+                count += 1
         return count
     except Exception:
         return 0
@@ -401,7 +421,7 @@ def main():
             # Still check for observation accumulation even without .md candidates
             observe_enabled = observer_cfg.get('enabled', True)
             if observe_enabled:
-                obs_threshold = watch_cfg.get('observeSuggestionThreshold', 50)
+                obs_threshold = watch_cfg.get('observeSuggestionThreshold', 200)
                 obs_count = count_observations_since_last_analysis(cwd)
                 if obs_count > obs_threshold:
                     auto_threshold = instinct_cfg.get('autoApproveThreshold', 0.7)
@@ -462,7 +482,7 @@ def main():
         instinct_suggestion = ""
 
         if observe_enabled:
-            obs_threshold = watch_cfg.get('observeSuggestionThreshold', 50)
+            obs_threshold = watch_cfg.get('observeSuggestionThreshold', 200)
             obs_count = count_observations_since_last_analysis(cwd)
             debug_log(f"Observation count: {obs_count} (threshold: {obs_threshold})")
 

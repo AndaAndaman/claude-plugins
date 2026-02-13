@@ -5,7 +5,7 @@ md-to-skill PreToolUse Hook - Instinct Suggestion
 Proactively suggests actions based on auto-approved instincts when tool use
 matches instinct triggers. Never blocks execution.
 
-Hooks on: Write|Edit|Bash
+Hooks on: Write|Edit|Bash|Read
 """
 
 import json
@@ -15,10 +15,20 @@ import re
 import fnmatch
 from datetime import datetime
 
-# Add plugin root to sys.path for config imports
-PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PLUGIN_ROOT not in sys.path:
-    sys.path.insert(0, PLUGIN_ROOT)
+# Try to import shared utilities from hook_utils (created by Package 1)
+try:
+    from hook_utils import parse_frontmatter, setup_plugin_path, load_hook_input
+    HOOK_UTILS_AVAILABLE = True
+except ImportError:
+    HOOK_UTILS_AVAILABLE = False
+
+# Fallback: setup plugin path manually if hook_utils not available
+if HOOK_UTILS_AVAILABLE:
+    setup_plugin_path()
+else:
+    PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if PLUGIN_ROOT not in sys.path:
+        sys.path.insert(0, PLUGIN_ROOT)
 
 try:
     from config.config_loader import load_config, get_instinct_config
@@ -26,12 +36,13 @@ try:
 except ImportError:
     CONFIG_AVAILABLE = False
 
-# Cache for loaded instincts (loaded once per invocation)
-_instincts_cache = None
-
 
 def parse_instinct_frontmatter(content: str) -> dict:
-    """Parse YAML frontmatter from an instinct markdown file."""
+    """Parse YAML frontmatter from an instinct markdown file.
+    Fallback when hook_utils is not available."""
+    if HOOK_UTILS_AVAILABLE:
+        return parse_frontmatter(content)
+
     match = re.search(r'^---\s*\n(.*?)\n---', content, re.DOTALL | re.MULTILINE)
     if not match:
         return {}
@@ -39,7 +50,6 @@ def parse_instinct_frontmatter(content: str) -> dict:
     frontmatter_text = match.group(1)
     result = {}
 
-    # Parse key-value pairs from frontmatter
     for line in frontmatter_text.split('\n'):
         line = line.strip()
         if not line or ':' not in line:
@@ -78,17 +88,66 @@ def extract_action(content: str) -> str:
     return ''
 
 
-def load_auto_approved_instincts(cwd: str) -> list:
-    """Load all auto-approved instincts from the instincts directory."""
-    global _instincts_cache
-    if _instincts_cache is not None:
-        return _instincts_cache
+def parse_match_patterns(content: str) -> list:
+    """Extract match_patterns from instinct frontmatter content.
 
+    match_patterns is a YAML list of dicts, e.g.:
+    match_patterns:
+      - tool: Write
+        file_glob: "*.ts"
+        path_contains: src/
+      - tool: Bash
+        command_prefix: npm
+    """
+    match = re.search(r'^---\s*\n(.*?)\n---', content, re.DOTALL | re.MULTILINE)
+    if not match:
+        return []
+
+    fm_text = match.group(1)
+    patterns = []
+    current_pattern = None
+    in_match_patterns = False
+
+    for line in fm_text.split('\n'):
+        stripped = line.strip()
+
+        if stripped.startswith('match_patterns:'):
+            in_match_patterns = True
+            continue
+
+        if in_match_patterns:
+            # Check if we've left the match_patterns block (new top-level key)
+            if not line.startswith(' ') and not line.startswith('\t') and ':' in stripped and not stripped.startswith('-'):
+                break
+
+            if stripped.startswith('- '):
+                # New pattern entry
+                if current_pattern:
+                    patterns.append(current_pattern)
+                current_pattern = {}
+                # Parse inline key-value from "- tool: Write"
+                rest = stripped[2:].strip()
+                if ':' in rest:
+                    k, _, v = rest.partition(':')
+                    current_pattern[k.strip()] = v.strip().strip('"').strip("'")
+            elif ':' in stripped and current_pattern is not None:
+                # Continuation key-value
+                k, _, v = stripped.partition(':')
+                current_pattern[k.strip()] = v.strip().strip('"').strip("'")
+
+    if current_pattern:
+        patterns.append(current_pattern)
+
+    return patterns
+
+
+def load_auto_approved_instincts(cwd: str) -> list:
+    """Load all auto-approved instincts from the instincts directory.
+    Skips rejected instincts (M3)."""
     instincts_dir = os.path.join(cwd, '.claude', 'md-to-skill-instincts')
     instincts = []
 
     if not os.path.isdir(instincts_dir):
-        _instincts_cache = instincts
         return instincts
 
     try:
@@ -102,10 +161,19 @@ def load_auto_approved_instincts(cwd: str) -> list:
                     content = f.read()
 
                 fm = parse_instinct_frontmatter(content)
+
+                # M3: Skip rejected instincts
+                if fm.get('rejected', False):
+                    continue
+
                 if not fm.get('auto_approved', False):
                     continue
 
                 action = extract_action(content)
+
+                # M4: Extract match_patterns if present
+                match_patterns = parse_match_patterns(content)
+
                 instincts.append({
                     'id': fm.get('id', filename.replace('.md', '')),
                     'trigger': fm.get('trigger', ''),
@@ -114,14 +182,67 @@ def load_auto_approved_instincts(cwd: str) -> list:
                     'action': action,
                     'filepath': filepath,
                     'suggestions_shown': fm.get('suggestions_shown', 0),
+                    'match_patterns': match_patterns,
                 })
             except Exception:
                 continue
     except Exception:
         pass
 
-    _instincts_cache = instincts
     return instincts
+
+
+def match_by_patterns(match_patterns: list, tool_name: str, tool_input: dict) -> bool:
+    """M4: Check if tool use matches explicit match_patterns.
+
+    match_patterns is a list of dicts:
+      - {tool: "Write|Edit", file_glob: "*.ts", path_contains: "src/"}
+      - {tool: "Bash", command_prefix: "npm"}
+      - {tool: "Read", file_glob: "*.config.*"}
+
+    Returns True if any pattern matches.
+    """
+    for pattern in match_patterns:
+        pattern_tool = pattern.get('tool', '')
+
+        # Check if tool name matches (supports pipe-separated values)
+        tool_options = [t.strip() for t in pattern_tool.split('|')]
+        if tool_name not in tool_options:
+            continue
+
+        # For Write/Edit/Read — check file path
+        if tool_name in ('Write', 'Edit', 'Read'):
+            file_path = tool_input.get('file_path', '').replace('\\', '/')
+            if not file_path:
+                continue
+
+            file_glob = pattern.get('file_glob', '')
+            path_contains = pattern.get('path_contains', '')
+
+            glob_match = True
+            if file_glob:
+                basename = os.path.basename(file_path)
+                glob_match = fnmatch.fnmatch(basename, file_glob) or fnmatch.fnmatch(file_path, file_glob)
+
+            path_match = True
+            if path_contains:
+                path_match = path_contains.lower() in file_path.lower()
+
+            if glob_match and path_match:
+                return True
+
+        # For Bash — check command prefix
+        elif tool_name == 'Bash':
+            command = tool_input.get('command', '')
+            command_prefix = pattern.get('command_prefix', '')
+
+            if command_prefix and command.strip().lower().startswith(command_prefix.lower()):
+                return True
+            elif not command_prefix:
+                # Pattern matched tool but no further constraint
+                return True
+
+    return False
 
 
 def match_write_edit(instinct: dict, tool_input: dict) -> bool:
@@ -207,6 +328,14 @@ def match_bash(instinct: dict, tool_input: dict) -> bool:
     return False
 
 
+def match_read(instinct: dict, tool_input: dict) -> bool:
+    """H4: Check if an instinct trigger matches a Read tool context.
+    Only matches if match_patterns explicitly includes Read tool."""
+    # Read matching only works via match_patterns (M4).
+    # We don't do fuzzy trigger matching for Read to avoid noisy suggestions.
+    return False
+
+
 def increment_suggestions_shown(filepath: str, current_count: int):
     """Increment the suggestions_shown counter in instinct frontmatter."""
     try:
@@ -239,9 +368,13 @@ def increment_suggestions_shown(filepath: str, current_count: int):
 def main():
     """Main entry point for the instinct suggestion hook."""
     try:
-        input_data = json.load(sys.stdin)
-        cwd = input_data.get('cwd', '.')
+        # Load hook input
+        if HOOK_UTILS_AVAILABLE:
+            input_data = load_hook_input()
+        else:
+            input_data = json.load(sys.stdin)
 
+        cwd = input_data.get('cwd', '.')
         tool_name = input_data.get('tool_name', '')
         tool_input = input_data.get('tool_input', {})
 
@@ -255,7 +388,7 @@ def main():
             print(json.dumps({"ok": True}))
             sys.exit(0)
 
-        # Load auto-approved instincts
+        # Load auto-approved instincts (M3: rejected instincts filtered out)
         instincts = load_auto_approved_instincts(cwd)
 
         if not instincts:
@@ -265,11 +398,19 @@ def main():
         # Find matching instincts
         matches = []
         for instinct in instincts:
-            matched = False
-            if tool_name in ('Write', 'Edit'):
-                matched = match_write_edit(instinct, tool_input)
-            elif tool_name == 'Bash':
-                matched = match_bash(instinct, tool_input)
+            match_patterns = instinct.get('match_patterns', [])
+
+            # M4: If match_patterns present, use them exclusively
+            if match_patterns:
+                matched = match_by_patterns(match_patterns, tool_name, tool_input)
+            else:
+                # Fall through to existing trigger-based matching (backward compat)
+                matched = False
+                if tool_name in ('Write', 'Edit'):
+                    matched = match_write_edit(instinct, tool_input)
+                elif tool_name == 'Bash':
+                    matched = match_bash(instinct, tool_input)
+                # H4: Read only matches via match_patterns, not trigger fallback
 
             if matched:
                 matches.append(instinct)

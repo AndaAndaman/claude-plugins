@@ -6,7 +6,7 @@ Captures tool use patterns to .claude/md-to-skill-observations.jsonl for later
 analysis by the /observe command. Detects richer patterns including user
 corrections, error resolutions, naming conventions, and tool preferences.
 
-Hooks on: Write|Edit|Bash (actions that reveal preferences)
+Hooks on: Write|Edit|Bash|Read (actions that reveal preferences)
 Never blocks execution.
 """
 
@@ -14,14 +14,20 @@ import json
 import sys
 import os
 import re
+import random
 import hashlib
-import fnmatch
 from datetime import datetime
 
-# Add plugin root to sys.path for config imports
-PLUGIN_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PLUGIN_ROOT not in sys.path:
-    sys.path.insert(0, PLUGIN_ROOT)
+from hook_utils import (
+    setup_plugin_path,
+    load_hook_input,
+    is_secret_file,
+    get_observations_path,
+    get_session_cache_path,
+)
+
+# Setup plugin path for config imports
+setup_plugin_path()
 
 try:
     from config.config_loader import load_config, get_observer_config, get_privacy_config
@@ -33,22 +39,26 @@ except ImportError:
 FALLBACK_MAX_FILE_SIZE_MB = 10
 FALLBACK_MAX_COMMAND_PREVIEW = 200
 SESSION_CACHE_MAX_ENTRIES = 20
+FALLBACK_SESSION_CACHE_TTL_HOURS = 4
+
+# Default sampling rates per tool
+DEFAULT_SAMPLING_RATES = {
+    'Write': 1.0,
+    'Edit': 1.0,
+    'Bash': 1.0,
+    'Read': 0.2,
+}
 
 
-def get_observations_path(cwd: str) -> str:
-    """Get path to observations JSONL file."""
-    return os.path.join(cwd, '.claude', 'md-to-skill-observations.jsonl')
+def load_session_cache(cwd: str, session_id: str = '', ttl_hours: float = FALLBACK_SESSION_CACHE_TTL_HOURS) -> dict:
+    """Load session cache tracking recent Write operations.
 
-
-def get_session_cache_path(cwd: str) -> str:
-    """Get path to lightweight session cache for tracking recent writes."""
-    return os.path.join(cwd, '.claude', 'md-to-skill-session-cache.json')
-
-
-def load_session_cache(cwd: str) -> dict:
-    """Load session cache tracking recent Write operations."""
+    Applies hybrid TTL:
+    - If session_id differs from cached last_session_id, clear entries
+    - If no session_id, filter out entries older than ttl_hours
+    """
     cache_path = get_session_cache_path(cwd)
-    default = {'writes': [], 'bash_failures': []}
+    default = {'writes': [], 'bash_failures': [], 'last_session_id': ''}
 
     if not os.path.exists(cache_path):
         return default
@@ -60,12 +70,44 @@ def load_session_cache(cwd: str) -> dict:
                 data['writes'] = []
             if 'bash_failures' not in data:
                 data['bash_failures'] = []
+
+            cached_session_id = data.get('last_session_id', '')
+
+            # Session-based TTL: if session changed, clear entries
+            if session_id and cached_session_id and session_id != cached_session_id:
+                data['writes'] = []
+                data['bash_failures'] = []
+                data['last_session_id'] = session_id
+                return data
+
+            # Time-based TTL: if no session_id, filter old entries
+            if not session_id:
+                now = datetime.now()
+                cutoff_seconds = ttl_hours * 3600
+
+                data['writes'] = _filter_by_ttl(data['writes'], now, cutoff_seconds)
+                data['bash_failures'] = _filter_by_ttl(data['bash_failures'], now, cutoff_seconds)
+
             return data
     except Exception:
         return default
 
 
-def save_session_cache(cwd: str, cache: dict):
+def _filter_by_ttl(entries: list, now: datetime, cutoff_seconds: float) -> list:
+    """Filter entries older than cutoff_seconds."""
+    result = []
+    for entry in entries:
+        try:
+            ts = datetime.fromisoformat(entry.get('timestamp', ''))
+            if (now - ts).total_seconds() < cutoff_seconds:
+                result.append(entry)
+        except Exception:
+            # Keep entries with unparseable timestamps (don't discard data)
+            result.append(entry)
+    return result
+
+
+def save_session_cache(cwd: str, cache: dict, session_id: str = ''):
     """Save session cache, keeping only the most recent entries."""
     cache_path = get_session_cache_path(cwd)
     try:
@@ -73,23 +115,15 @@ def save_session_cache(cwd: str, cache: dict):
         cache['writes'] = cache['writes'][-SESSION_CACHE_MAX_ENTRIES:]
         cache['bash_failures'] = cache['bash_failures'][-SESSION_CACHE_MAX_ENTRIES:]
 
+        # Store session_id for TTL detection
+        if session_id:
+            cache['last_session_id'] = session_id
+
         os.makedirs(os.path.dirname(cache_path), exist_ok=True)
         with open(cache_path, 'w', encoding='utf-8') as f:
             json.dump(cache, f)
     except Exception:
         pass
-
-
-def is_secret_file(file_path: str, secret_patterns: list) -> bool:
-    """Check if file path matches any secret file pattern."""
-    if not file_path or not secret_patterns:
-        return False
-
-    basename = os.path.basename(file_path)
-    for pattern in secret_patterns:
-        if fnmatch.fnmatch(basename, pattern):
-            return True
-    return False
 
 
 def rotate_if_needed(obs_path: str, max_bytes: int):
@@ -248,6 +282,10 @@ def extract_input_summary(tool_name: str, tool_input: dict, max_cmd_preview: int
         summary['command_preview'] = command[:max_cmd_preview]
         summary['command_length'] = len(command)
 
+    elif tool_name == 'Read':
+        # Privacy-first: capture only file_path, never content
+        summary['file_path'] = tool_input.get('file_path', '')
+
     return summary
 
 
@@ -269,12 +307,51 @@ def extract_output_summary(tool_name: str, tool_output: dict) -> dict:
     return summary
 
 
+def is_correction_pattern(tool_name: str, file_path: str, session_cache: dict) -> bool:
+    """Check if this Edit targets a file with a recent Write (correction pattern)."""
+    if tool_name != 'Edit' or not file_path:
+        return False
+    now = datetime.now()
+    for write_entry in reversed(session_cache.get('writes', [])):
+        if write_entry.get('file_path') == file_path:
+            try:
+                write_time = datetime.fromisoformat(write_entry['timestamp'])
+                if (now - write_time).total_seconds() < 300:
+                    return True
+            except Exception:
+                pass
+            break
+    return False
+
+
+def should_sample(tool_name: str, sampling_rates: dict, output_summary: dict,
+                  is_correction: bool) -> bool:
+    """Determine whether to record this observation based on sampling.
+
+    Exemptions (always record):
+    - Errors (output_summary.success is False)
+    - Correction patterns (Edit after recent Write to same file)
+    """
+    # Always record errors
+    if not output_summary.get('success', True):
+        return True
+
+    # Always record corrections
+    if is_correction:
+        return True
+
+    # Apply sampling rate
+    rate = sampling_rates.get(tool_name, 1.0)
+    return random.random() < rate
+
+
 def main():
     """Main entry point for the observation collector hook."""
     try:
-        input_data = json.load(sys.stdin)
+        input_data = load_hook_input()
 
         cwd = input_data.get('cwd', '.')
+        session_id = input_data.get('session_id', '')
 
         # Load config (centralized or fallback)
         if CONFIG_AVAILABLE:
@@ -288,6 +365,8 @@ def main():
                 'capturePatterns': {},
                 'excludeTools': [],
                 'excludePathPatterns': [],
+                'samplingRates': DEFAULT_SAMPLING_RATES,
+                'sessionCacheTTLHours': FALLBACK_SESSION_CACHE_TTL_HOURS,
             }
             privacy_cfg = {
                 'maxCommandPreviewLength': FALLBACK_MAX_COMMAND_PREVIEW,
@@ -301,12 +380,6 @@ def main():
         tool_name = input_data.get('tool_name', '')
         tool_input = input_data.get('tool_input', {})
         tool_output = input_data.get('tool_output', {})
-
-        if isinstance(tool_input, str):
-            try:
-                tool_input = json.loads(tool_input)
-            except (json.JSONDecodeError, TypeError):
-                tool_input = {}
 
         if not tool_name:
             print(json.dumps({"ok": True}))
@@ -338,8 +411,20 @@ def main():
                     print(json.dumps({"ok": True}))
                     sys.exit(0)
 
-        # Load session cache for pattern detection
-        session_cache = load_session_cache(cwd)
+        # Load session cache with TTL support
+        ttl_hours = observer_cfg.get('sessionCacheTTLHours', FALLBACK_SESSION_CACHE_TTL_HOURS)
+        session_cache = load_session_cache(cwd, session_id, ttl_hours)
+
+        # Per-tool sampling (M5) - check before doing heavy pattern detection
+        sampling_rates = observer_cfg.get('samplingRates', DEFAULT_SAMPLING_RATES)
+        correction = is_correction_pattern(tool_name, file_path, session_cache)
+
+        if not should_sample(tool_name, sampling_rates, output_summary, correction):
+            # Still update session cache even if not recording
+            _update_session_cache(tool_name, file_path, input_summary, output_summary,
+                                  cwd, session_cache, session_id)
+            print(json.dumps({"ok": True}))
+            sys.exit(0)
 
         # Detect patterns
         capture_config = observer_cfg.get('capturePatterns', {})
@@ -349,32 +434,17 @@ def main():
             session_cache, capture_config
         )
 
-        # Update session cache
-        now_iso = datetime.now().isoformat()
-        if tool_name == 'Write' and file_path:
-            session_cache['writes'].append({
-                'file_path': file_path,
-                'timestamp': now_iso
-            })
-
-        if tool_name == 'Bash' and not output_summary.get('success', True):
-            cmd_preview = input_summary.get('command_preview', '')
-            first_token = cmd_preview.split()[0] if cmd_preview else ''
-            if first_token:
-                session_cache['bash_failures'].append({
-                    'first_token': first_token,
-                    'timestamp': now_iso
-                })
-
-        save_session_cache(cwd, session_cache)
+        # Update session cache (Write tracking and Bash failure tracking)
+        _update_session_cache(tool_name, file_path, input_summary, output_summary,
+                              cwd, session_cache, session_id)
 
         # Build observation entry
         observation = {
-            'timestamp': now_iso,
+            'timestamp': datetime.now().isoformat(),
             'tool': tool_name,
             'input_summary': input_summary,
             'output_summary': output_summary,
-            'session_id': input_data.get('session_id', ''),
+            'session_id': session_id,
             'patterns': patterns,
         }
 
@@ -399,6 +469,33 @@ def main():
         # Never block on errors
         print(json.dumps({"ok": True}))
         sys.exit(0)
+
+
+def _update_session_cache(tool_name: str, file_path: str, input_summary: dict,
+                          output_summary: dict, cwd: str, session_cache: dict,
+                          session_id: str):
+    """Update session cache with Write and Bash failure tracking.
+
+    Note: Read is NOT added to session cache writes (Read is not a Write).
+    """
+    now_iso = datetime.now().isoformat()
+
+    if tool_name == 'Write' and file_path:
+        session_cache['writes'].append({
+            'file_path': file_path,
+            'timestamp': now_iso
+        })
+
+    if tool_name == 'Bash' and not output_summary.get('success', True):
+        cmd_preview = input_summary.get('command_preview', '')
+        first_token = cmd_preview.split()[0] if cmd_preview else ''
+        if first_token:
+            session_cache['bash_failures'].append({
+                'first_token': first_token,
+                'timestamp': now_iso
+            })
+
+    save_session_cache(cwd, session_cache, session_id)
 
 
 if __name__ == '__main__':

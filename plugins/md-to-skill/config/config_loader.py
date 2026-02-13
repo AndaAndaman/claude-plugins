@@ -27,15 +27,29 @@ def _load_defaults() -> dict:
 
 
 def _fallback_defaults() -> dict:
-    """Hardcoded fallback if defaults.json is missing."""
+    """Hardcoded fallback if defaults.json is missing. Must match defaults.json."""
     return {
-        "version": "0.6.0",
+        "version": "0.7.0",
         "observer": {
             "enabled": True,
             "maxObservationsMB": 10,
-            "capturePatterns": {},
+            "capturePatterns": {
+                "userCorrections": True,
+                "errorResolutions": True,
+                "repeatedWorkflows": True,
+                "toolPreferences": True,
+                "fileNamingConventions": True,
+                "importPatterns": False
+            },
             "excludeTools": [],
-            "excludePathPatterns": []
+            "excludePathPatterns": ["node_modules", ".git", "dist", "build"],
+            "samplingRates": {
+                "Write": 1.0,
+                "Edit": 1.0,
+                "Bash": 1.0,
+                "Read": 0.2
+            },
+            "sessionCacheTTLHours": 4
         },
         "instincts": {
             "initialConfidence": 0.3,
@@ -64,7 +78,7 @@ def _fallback_defaults() -> dict:
             "enabled": True,
             "minWords": 200,
             "excludePatterns": ["README.md", "CHANGELOG.md", "LICENSE.md", "CLAUDE.md"],
-            "observeSuggestionThreshold": 50
+            "observeSuggestionThreshold": 500
         },
         "privacy": {
             "neverCaptureContent": True,

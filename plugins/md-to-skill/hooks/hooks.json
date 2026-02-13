@@ -3,7 +3,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Write|Edit|Bash",
+        "matcher": "Write|Edit|Bash|Read",
         "hooks": [
           {
             "type": "command",
@@ -30,37 +30,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/skill-usage_posttooluse.py\"",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/skill_posttooluse.py\"",
             "timeout": 5000
           }
         ]
       },
       {
-        "matcher": "Write|Edit|Bash",
+        "matcher": "Write|Edit|Bash|Read",
         "hooks": [
           {
             "type": "command",
             "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/observe_posttooluse.py\"",
-            "timeout": 3000
-          }
-        ]
-      },
-      {
-        "matcher": "Skill",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/quickwins-bridge_posttooluse.py\"",
-            "timeout": 3000
-          }
-        ]
-      },
-      {
-        "matcher": "Skill",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/clarification-bridge_posttooluse.py\"",
             "timeout": 3000
           }
         ]

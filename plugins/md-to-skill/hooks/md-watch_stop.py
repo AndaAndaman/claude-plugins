@@ -40,6 +40,13 @@ try:
 except ImportError:
     CONFIG_AVAILABLE = False
 
+# Try to import hook_utils (created by implementer-1)
+try:
+    from hooks.hook_utils import parse_frontmatter as _hu_parse_frontmatter
+    HOOK_UTILS_AVAILABLE = True
+except ImportError:
+    HOOK_UTILS_AVAILABLE = False
+
 
 # Global debug state
 DEBUG_ENABLED = False
@@ -297,11 +304,62 @@ def check_file_quality(file_path: str, cwd: str, min_words: int) -> dict:
     return result
 
 
+def _get_obs_count_cache_path(cwd: str) -> str:
+    """Get path to observation count cache file."""
+    return os.path.join(cwd, '.claude', 'md-to-skill-obs-count-cache.json')
+
+
+def _load_obs_count_cache(cwd: str) -> dict:
+    """Load observation count cache. Returns empty dict if missing/invalid."""
+    cache_path = _get_obs_count_cache_path(cwd)
+    try:
+        if os.path.exists(cache_path):
+            with open(cache_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+
+def _save_obs_count_cache(cwd: str, count: int, file_size: int, file_mtime: str):
+    """Save observation count cache."""
+    cache_path = _get_obs_count_cache_path(cwd)
+    try:
+        os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'count': count,
+                'file_size': file_size,
+                'file_mtime': file_mtime
+            }, f, indent=2)
+    except Exception:
+        pass
+
+
 def count_observations_since_last_analysis(cwd: str) -> int:
-    """Count observation entries since last /observe run, using state file timestamp."""
+    """Count observation entries since last /observe run, with file size/mtime cache."""
     obs_path = os.path.join(cwd, '.claude', 'md-to-skill-observations.jsonl')
     if not os.path.exists(obs_path):
         return 0
+
+    # Check cache validity: file_size and file_mtime must match
+    try:
+        stat = os.stat(obs_path)
+        current_size = stat.st_size
+        current_mtime = datetime.fromtimestamp(stat.st_mtime).isoformat()
+    except Exception:
+        current_size = -1
+        current_mtime = ''
+
+    cache = _load_obs_count_cache(cwd)
+    if (cache.get('file_size') == current_size and
+            cache.get('file_mtime') == current_mtime and
+            'count' in cache):
+        debug_log(f"Obs count cache hit: {cache['count']}")
+        return cache['count']
+
+    # Cache miss - do full count
+    debug_log("Obs count cache miss, recounting")
 
     # Read last analyzed timestamp from state file
     last_ts = None
@@ -329,6 +387,9 @@ def count_observations_since_last_analysis(cwd: str) -> int:
                     except (json.JSONDecodeError, KeyError):
                         pass
                 count += 1
+
+        # Save to cache
+        _save_obs_count_cache(cwd, count, current_size, current_mtime)
         return count
     except Exception:
         return 0
@@ -349,16 +410,29 @@ def count_auto_approved_instincts(cwd: str, threshold: float) -> int:
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
                     content = f.read(2000)  # Only need frontmatter
-                match = re.search(r'^---\s*\n(.*?)\n---', content, re.DOTALL | re.MULTILINE)
-                if match:
-                    fm = match.group(1)
-                    if re.search(r'auto_approved:\s*true', fm, re.IGNORECASE):
+                if HOOK_UTILS_AVAILABLE:
+                    fm = _hu_parse_frontmatter(content)
+                    if fm.get('auto_approved') is True:
                         count += 1
+                else:
+                    match = re.search(r'^---\s*\n(.*?)\n---', content, re.DOTALL | re.MULTILINE)
+                    if match:
+                        fm_text = match.group(1)
+                        if re.search(r'auto_approved:\s*true', fm_text, re.IGNORECASE):
+                            count += 1
             except Exception:
                 continue
         return count
     except Exception:
         return 0
+
+
+def _build_observe_hint(obs_count: int, auto_count: int) -> str:
+    """Build the auto-approve hint string."""
+    auto_hint = ""
+    if auto_count > 0:
+        auto_hint = f" ({auto_count} instincts above auto-approve threshold)"
+    return auto_hint
 
 
 def main():
@@ -388,7 +462,7 @@ def main():
                 'enabled': True,
                 'minWords': 200,
                 'excludePatterns': ['README.md', 'CHANGELOG.md', 'LICENSE.md', 'CLAUDE.md'],
-                'observeSuggestionThreshold': 50,
+                'observeSuggestionThreshold': 500,
             }
             observer_cfg = {'enabled': True}
             instinct_cfg = {'autoApproveThreshold': 0.7}
@@ -401,6 +475,10 @@ def main():
         if not watch_cfg.get('enabled', True):
             debug_log("EXIT: watchEnabled=False (disabled)")
             sys.exit(0)
+
+        # Pre-compute auto_approved count ONCE for the entire run
+        auto_threshold = instinct_cfg.get('autoApproveThreshold', 0.7)
+        auto_count = count_auto_approved_instincts(cwd, auto_threshold)
 
         # Load session state
         state_path = get_session_state_path(cwd, transcript_path)
@@ -424,11 +502,7 @@ def main():
                 obs_threshold = watch_cfg.get('observeSuggestionThreshold', 200)
                 obs_count = count_observations_since_last_analysis(cwd)
                 if obs_count > obs_threshold:
-                    auto_threshold = instinct_cfg.get('autoApproveThreshold', 0.7)
-                    auto_count = count_auto_approved_instincts(cwd, auto_threshold)
-                    auto_hint = ""
-                    if auto_count > 0:
-                        auto_hint = f" ({auto_count} instincts above auto-approve threshold)"
+                    auto_hint = _build_observe_hint(obs_count, auto_count)
 
                     debug_log(f"TRIGGER: Blocking stop for instinct suggestion ({obs_count} observations{auto_hint})")
                     result = {
@@ -487,11 +561,7 @@ def main():
             debug_log(f"Observation count: {obs_count} (threshold: {obs_threshold})")
 
             if obs_count > obs_threshold:
-                auto_threshold = instinct_cfg.get('autoApproveThreshold', 0.7)
-                auto_count = count_auto_approved_instincts(cwd, auto_threshold)
-                auto_hint = ""
-                if auto_count > 0:
-                    auto_hint = f" ({auto_count} instincts above auto-approve threshold)"
+                auto_hint = _build_observe_hint(obs_count, auto_count)
 
                 instinct_suggestion = f"""
 
@@ -507,11 +577,7 @@ Run /observe to analyze patterns and extract instincts."""
             # Even without .md candidates, suggest /observe if observations accumulated
             if instinct_suggestion:
                 debug_log("TRIGGER: Blocking stop for instinct suggestion only")
-                auto_threshold = instinct_cfg.get('autoApproveThreshold', 0.7)
-                auto_count = count_auto_approved_instincts(cwd, auto_threshold)
-                auto_hint = ""
-                if auto_count > 0:
-                    auto_hint = f" ({auto_count} instincts above auto-approve threshold)"
+                auto_hint = _build_observe_hint(obs_count, auto_count)
 
                 result = {
                     'decision': 'block',

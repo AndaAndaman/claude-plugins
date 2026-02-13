@@ -499,7 +499,7 @@ def main():
             # Still check for observation accumulation even without .md candidates
             observe_enabled = observer_cfg.get('enabled', True)
             if observe_enabled:
-                obs_threshold = watch_cfg.get('observeSuggestionThreshold', 200)
+                obs_threshold = watch_cfg.get('observeSuggestionThreshold', 500)
                 obs_count = count_observations_since_last_analysis(cwd)
                 if obs_count > obs_threshold:
                     auto_hint = _build_observe_hint(obs_count, auto_count)
@@ -556,7 +556,7 @@ def main():
         instinct_suggestion = ""
 
         if observe_enabled:
-            obs_threshold = watch_cfg.get('observeSuggestionThreshold', 200)
+            obs_threshold = watch_cfg.get('observeSuggestionThreshold', 500)
             obs_count = count_observations_since_last_analysis(cwd)
             debug_log(f"Observation count: {obs_count} (threshold: {obs_threshold})")
 

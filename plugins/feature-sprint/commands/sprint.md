@@ -138,9 +138,12 @@ If user says no: cleanup and stop.
 Analyze the brief to divide work into packages by **file ownership**:
 
 **Sizing rules:**
-- **1 target file** → 1 implementer
+- **1 file, small change** (add function, fix bug, minor edit) → 1 implementer
+- **1-2 files, moderate change** → 1 implementer
 - **2-3 files in different modules** → 2 implementers
 - **4+ files or cross-layer changes** → 3 implementers
+
+**Default to fewer implementers.** Only spawn multiple when files are in genuinely separate modules and benefit from parallel work. A single implementer is fine for most features.
 
 **Each package gets:**
 - Exclusive file list (no overlap between packages)
@@ -168,17 +171,17 @@ Create implementation tasks with TaskCreate. Each task description includes:
 
 ## Phase 6: Spawn Implementers (Parallel)
 
-**CRITICAL**: Spawn all implementers in a SINGLE message.
+Spawn all implementers in a SINGLE message (if multiple). If only 1 implementer, just spawn one.
 
 ```
 Implementing: "{{ feature }}"
   implementer-1: [files]
-  implementer-2: [files]
+  (implementer-2: [files])  ← only if needed
 ```
 
 Spawn each with:
 - `team_name: "sprint"`
-- `name: "implementer-1"`, `"implementer-2"`, etc.
+- `name: "implementer-1"` (and `"implementer-2"`, `"implementer-3"` if needed)
 - `subagent_type: "feature-sprint:implementer"`
 - Prompt: Tell them to check TaskList, claim their task, implement their work package
 
@@ -186,15 +189,22 @@ Wait for all implementers to complete.
 
 ## Phase 7: Code Review
 
+**Only spawn reviewer when 2+ implementers were used.** When multiple implementers work in parallel, their code must be validated as a whole to ensure it integrates correctly.
+
+If only 1 implementer was used: **skip this phase** - the code is self-contained, no integration risk.
+
+If 2+ implementers were used:
+
 Create a review task with TaskCreate containing:
 - The full implementation brief
 - List of all implementer tasks and their files
+- **Key focus: verify the combined code works end-to-end** - imports resolve, interfaces match, data flows correctly across file boundaries
 
 Spawn reviewer:
 - `team_name: "sprint"`
 - `name: "reviewer"`
 - `subagent_type: "feature-sprint:reviewer"`
-- Prompt: Check TaskList for review task, review all implemented code against the brief
+- Prompt: "Multiple implementers worked on this feature. Review all code with special focus on integration: do the pieces fit together? Check imports, shared types, function signatures match across files, and the overall feature works end-to-end when combined."
 
 Wait for reviewer to complete and send their report.
 

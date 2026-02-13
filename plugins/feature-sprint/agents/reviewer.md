@@ -58,10 +58,14 @@ For each risk in the brief:
 - [ ] Import style matches existing files
 - [ ] File structure matches similar files
 
-### 4. Cross-Implementer Consistency
-- [ ] Interface contracts between implementers are satisfied
+### 4. End-to-End Integration (HIGHEST PRIORITY)
+This is your primary job - verifying that code from multiple implementers works together:
+- [ ] Imports between implementers' files resolve correctly
+- [ ] Function signatures match across callers and callees
+- [ ] Shared types/interfaces are compatible (no mismatched shapes)
+- [ ] Data flows correctly across file boundaries (correct params, return types)
 - [ ] No conflicting assumptions between work packages
-- [ ] Shared types/interfaces are compatible
+- [ ] The feature works as a whole when all pieces are combined
 - [ ] No duplicate functionality across packages
 
 ### 5. Code Quality

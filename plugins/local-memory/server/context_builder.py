@@ -83,6 +83,36 @@ _OPEN_MARKER_RE = re.compile(r'<!-- AUTO-GENERATED\b[^>]*-->')
 _CLOSE_MARKER_RE = re.compile(r'<!-- END AUTO-GENERATED CONTENT -->')
 _UPDATES_RE = re.compile(r'<!-- Updates: ([^>]+) -->')
 
+# Timeline patterns
+_TIMELINE_SECTION_RE = re.compile(r'## Timeline\n\n?((?:- \*\*\d{4}-\d{2}-\d{2}\*\* — [^\n]+\n)*)', re.MULTILINE)
+_TIMELINE_ENTRY_RE = re.compile(r'- \*\*(\d{4}-\d{2}-\d{2})\*\* — (.+)')
+
+_TIMELINE_MAX_ENTRIES = 20
+
+
+def _parse_timeline(content: str) -> List[Dict]:
+    """Extract timeline entries from auto-gen block content.
+
+    Returns list of dicts with 'date' and 'description' keys, newest first.
+    """
+    entries = []
+    section_match = _TIMELINE_SECTION_RE.search(content)
+    if not section_match:
+        return entries
+    for m in _TIMELINE_ENTRY_RE.finditer(section_match.group(1)):
+        entries.append({"date": m.group(1), "description": m.group(2).strip()})
+    return entries
+
+
+def _build_timeline_section(entries: List[Dict]) -> str:
+    """Render a ## Timeline section from a list of entry dicts."""
+    if not entries:
+        return ""
+    lines = ["## Timeline\n"]
+    for e in entries:
+        lines.append(f"- **{e['date']}** — {e['description']}")
+    return "\n".join(lines) + "\n"
+
 
 def read_settings(project_root: str) -> Dict:
     """Read settings from shared module (single source of truth)."""
@@ -716,6 +746,10 @@ async def handle_list_tools() -> List[Tool]:
                     "smart_merge": {
                         "type": "boolean",
                         "description": "Enable smart merge (default: true)"
+                    },
+                    "change_description": {
+                        "type": "string",
+                        "description": "One-sentence description of what changed (for timeline). Defaults to 'Content updated'."
                     }
                 },
                 "required": ["directory", "content"]
@@ -985,6 +1019,7 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
         content = arguments.get("content", "")
         smart_merge = arguments.get("smart_merge", True)
         project_root = arguments.get("project_root", os.getcwd())
+        change_description = arguments.get("change_description", None)
 
         # Resolve path consistently with other tools (use project_root, not cwd)
         if not os.path.isabs(directory):
@@ -1039,9 +1074,10 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
                     warnings.append(f"Multiple marker pairs detected ({len(open_markers)} open, "
                                     f"{len(close_markers)} close). Used outermost pair for merge.")
 
-                # --- Extract original creation date and update history ---
+                # --- Extract original creation date, update history, and timeline ---
                 original_creation_date = None
                 previous_dates = []
+                existing_timeline_entries = []
                 if open_markers and close_markers:
                     auto_gen_block = existing[open_markers[0].start():close_markers[-1].end()]
                     updates_match = _UPDATES_RE.search(auto_gen_block)
@@ -1053,6 +1089,8 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
                         original_creation_date = marker_date_match.group(1)
                         if not previous_dates:
                             previous_dates = [original_creation_date]
+                    # Extract existing timeline entries
+                    existing_timeline_entries = _parse_timeline(auto_gen_block)
 
                 before_content = ""
                 after_content = ""
@@ -1115,6 +1153,27 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
                     count=1
                 )
 
+                # --- Build and inject timeline ---
+                desc = change_description or "Content updated"
+                new_entry = {"date": today_str, "description": desc}
+                # Same-day: replace existing entry with same date
+                timeline_entries = [e for e in existing_timeline_entries if e["date"] != today_str]
+                timeline_entries.insert(0, new_entry)
+                # Cap at max entries
+                timeline_entries = timeline_entries[:_TIMELINE_MAX_ENTRIES]
+                timeline_section = _build_timeline_section(timeline_entries)
+
+                # Remove any existing timeline section from new content (generate_context won't add one,
+                # but handle edge cases where content already has one)
+                content = _TIMELINE_SECTION_RE.sub("", content)
+
+                # Inject timeline just before closing marker
+                if timeline_section:
+                    content = content.replace(
+                        closing_marker,
+                        "\n" + timeline_section + "\n" + closing_marker
+                    )
+
                 # Combine: user-before + new auto-gen + user-after
                 if before_content.strip():
                     content = before_content.rstrip("\n") + "\n\n" + content
@@ -1131,6 +1190,14 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
                 lambda m: m.group() + "\n" + updates_comment,
                 content,
                 count=1
+            )
+
+            # --- Add initial timeline entry for new files ---
+            desc = change_description or "Content updated"
+            timeline_section = _build_timeline_section([{"date": today_str, "description": desc}])
+            content = content.replace(
+                closing_marker,
+                "\n" + timeline_section + "\n" + closing_marker
             )
 
         # Write file with file locking for concurrent safety

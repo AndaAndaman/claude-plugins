@@ -119,7 +119,7 @@ This returns:
 
 ### Step 4: Write Context File
 
-Write or merge the generated content into CLAUDE.md:
+Write or merge the generated content into CLAUDE.md. **Always include a `change_description`** — summarize what changed in one sentence based on the files you analyzed (e.g., "Added auth middleware and updated route handlers").
 
 ```
 use_mcp_tool(
@@ -127,7 +127,8 @@ use_mcp_tool(
   {
     "directory": "<relative_path_from_project_root>",
     "content": "<generated_markdown_from_step3>",
-    "project_root": "<project_root_path>"
+    "project_root": "<project_root_path>",
+    "change_description": "<one sentence describing what changed>"
   }
 )
 ```
@@ -136,6 +137,7 @@ The write operation:
 - Creates new CLAUDE.md if it doesn't exist
 - Smartly merges with existing CLAUDE.md (preserves user content before and after auto-generated block)
 - Ensures auto-generated markers are present even if you rewrite the content
+- Adds a Timeline entry with the change_description and today's date
 - Returns success/failure status
 
 ### Step 5: Report Results
@@ -157,7 +159,7 @@ You have access to these local-memory MCP tools:
 |------|---------|----------------|
 | `analyze_directory` | Scan directory structure and detect patterns | `directory`, `project_root`, `depth` |
 | `generate_context` | Generate CLAUDE.md markdown content | `directory`, `project_root`, `max_files`, `analysis` |
-| `write_context` | Write/merge CLAUDE.md file with smart preservation | `directory`, `content`, `project_root` |
+| `write_context` | Write/merge CLAUDE.md file with smart preservation | `directory`, `content`, `project_root`, `change_description` |
 | `list_context_files` | List all CLAUDE.md files in project | `project_root` |
 
 ## Quality Guidelines

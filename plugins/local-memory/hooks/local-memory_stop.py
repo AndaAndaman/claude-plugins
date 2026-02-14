@@ -93,7 +93,19 @@ def get_session_state_path(cwd: str, transcript_path: str) -> str:
     """Get path for session state file based on transcript path."""
     # Create a hash of the transcript path for a unique state file per session
     transcript_hash = hashlib.md5(transcript_path.encode()).hexdigest()[:12]
-    return os.path.join(cwd, '.claude', f'local-memory-state-{transcript_hash}.json')
+    state_dir = os.path.join(cwd, '.claude', 'local-memory-state')
+    new_path = os.path.join(state_dir, f'{transcript_hash}.json')
+
+    # Migrate from old flat layout if needed
+    old_path = os.path.join(cwd, '.claude', f'local-memory-state-{transcript_hash}.json')
+    if os.path.exists(old_path) and not os.path.exists(new_path):
+        os.makedirs(state_dir, exist_ok=True)
+        try:
+            os.rename(old_path, new_path)
+        except OSError:
+            pass  # Fall through — load will handle either location
+
+    return new_path
 
 
 def load_session_state(state_path: str) -> dict:
@@ -200,17 +212,33 @@ def cleanup_stale_files(cwd: str, max_age_days: int = 7):
     now = time.time()
     max_age_secs = max_age_days * 86400
 
+    # Clean up new subdirectory layout
+    for subdir_name in ('local-memory-state', 'local-memory-cache'):
+        subdir = os.path.join(claude_dir, subdir_name)
+        if not os.path.isdir(subdir):
+            continue
+        try:
+            for entry in os.scandir(subdir):
+                if entry.is_file() and entry.name.endswith('.json'):
+                    try:
+                        if now - entry.stat().st_mtime > max_age_secs:
+                            os.remove(entry.path)
+                            debug_log(f"Cleaned up stale file: {subdir_name}/{entry.name}")
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+
+    # Also clean up leftover old flat-layout files (migration period)
     try:
         for entry in os.scandir(claude_dir):
             if not entry.is_file():
                 continue
-            # Clean up stale state files and cache files
             if (entry.name.startswith('local-memory-state-') or
                     entry.name.startswith('local-memory-cache-')) and entry.name.endswith('.json'):
                 try:
-                    if now - entry.stat().st_mtime > max_age_secs:
-                        os.remove(entry.path)
-                        debug_log(f"Cleaned up stale file: {entry.name}")
+                    os.remove(entry.path)
+                    debug_log(f"Cleaned up old flat-layout file: {entry.name}")
                 except OSError:
                     pass
     except OSError:

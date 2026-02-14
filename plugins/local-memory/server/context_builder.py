@@ -600,7 +600,19 @@ def _score_quality(file_summaries: Dict[str, str], overview: str,
 def _get_cache_path(directory: str, project_root: str) -> str:
     """Get the cache file path for a directory."""
     cache_hash = hashlib.md5(directory.encode()).hexdigest()[:12]
-    return os.path.join(project_root, '.claude', f'local-memory-cache-{cache_hash}.json')
+    cache_dir = os.path.join(project_root, '.claude', 'local-memory-cache')
+    new_path = os.path.join(cache_dir, f'{cache_hash}.json')
+
+    # Migrate from old flat layout if needed
+    old_path = os.path.join(project_root, '.claude', f'local-memory-cache-{cache_hash}.json')
+    if os.path.exists(old_path) and not os.path.exists(new_path):
+        os.makedirs(cache_dir, exist_ok=True)
+        try:
+            os.rename(old_path, new_path)
+        except OSError:
+            pass  # Fall through — load will handle either location
+
+    return new_path
 
 
 def _load_summary_cache(directory: str, project_root: str) -> dict:

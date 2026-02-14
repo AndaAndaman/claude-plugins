@@ -48,7 +48,7 @@ Key config values used throughout:
 
 ### Step 0.5: Load Processing State
 
-Read `.claude/md-to-skill-observe-state.json` to determine what was already processed:
+Read `.claude/md-to-skill-cache/observe-state.json` to determine what was already processed:
 
 ```json
 {
@@ -374,7 +374,7 @@ Run /evolve to check if instincts are ready to become skills.
 
 ### Step 6.5: Save Processing State
 
-After showing the summary (and not in `--patterns` dry-run mode), write updated state to `.claude/md-to-skill-observe-state.json`:
+After showing the summary (and not in `--patterns` dry-run mode), write updated state to `.claude/md-to-skill-cache/observe-state.json`:
 
 ```json
 {

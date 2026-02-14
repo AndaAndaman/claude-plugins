@@ -61,9 +61,33 @@ def get_observations_path(cwd: str) -> str:
     return os.path.join(cwd, '.claude', 'md-to-skill-observations.jsonl')
 
 
+def get_cache_dir(cwd: str) -> str:
+    """Get path to md-to-skill cache directory."""
+    return os.path.join(cwd, '.claude', 'md-to-skill-cache')
+
+
+def _migrate_cache_file(cwd: str, old_name: str, new_name: str) -> str:
+    """Migrate a singleton cache file from flat layout to cache subdirectory.
+
+    Returns the new path (in md-to-skill-cache/).
+    """
+    cache_dir = get_cache_dir(cwd)
+    new_path = os.path.join(cache_dir, new_name)
+    old_path = os.path.join(cwd, '.claude', old_name)
+
+    if os.path.exists(old_path) and not os.path.exists(new_path):
+        os.makedirs(cache_dir, exist_ok=True)
+        try:
+            os.rename(old_path, new_path)
+        except OSError:
+            pass
+
+    return new_path
+
+
 def get_session_cache_path(cwd: str) -> str:
     """Get path to lightweight session cache for tracking recent writes."""
-    return os.path.join(cwd, '.claude', 'md-to-skill-session-cache.json')
+    return _migrate_cache_file(cwd, 'md-to-skill-session-cache.json', 'session-cache.json')
 
 
 def parse_frontmatter(content: str) -> dict:

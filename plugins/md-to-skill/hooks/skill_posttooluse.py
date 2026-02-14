@@ -151,9 +151,25 @@ def _resolve_update_frontmatter_field(content, key, new_value):
 
 # ---- Usage tracking helpers (from skill-usage_posttooluse.py) ----
 
+def _get_cache_path(cwd: str, filename: str, old_filename: str) -> str:
+    """Get path for a cache file with auto-migration from old flat layout."""
+    cache_dir = os.path.join(cwd, '.claude', 'md-to-skill-cache')
+    new_path = os.path.join(cache_dir, filename)
+
+    old_path = os.path.join(cwd, '.claude', old_filename)
+    if os.path.exists(old_path) and not os.path.exists(new_path):
+        os.makedirs(cache_dir, exist_ok=True)
+        try:
+            os.rename(old_path, new_path)
+        except OSError:
+            pass
+
+    return new_path
+
+
 def _load_tracking_file(cwd: str) -> dict:
     """Load the usage tracking file."""
-    tracking_path = os.path.join(cwd, '.claude', 'md-to-skill-usage.json')
+    tracking_path = _get_cache_path(cwd, 'usage.json', 'md-to-skill-usage.json')
     default_data = {'skills': {}, 'total_invocations': 0}
     if not os.path.exists(tracking_path):
         return default_data
@@ -171,7 +187,7 @@ def _load_tracking_file(cwd: str) -> dict:
 
 def _save_tracking_file(cwd: str, data: dict):
     """Save the usage tracking file."""
-    tracking_path = os.path.join(cwd, '.claude', 'md-to-skill-usage.json')
+    tracking_path = _get_cache_path(cwd, 'usage.json', 'md-to-skill-usage.json')
     try:
         os.makedirs(os.path.dirname(tracking_path), exist_ok=True)
         with open(tracking_path, 'w', encoding='utf-8') as f:
@@ -182,7 +198,7 @@ def _save_tracking_file(cwd: str, data: dict):
 
 def _load_dedup(cwd: str) -> dict:
     """Load dedup tracking for instinct reinforcements."""
-    dedup_path = os.path.join(cwd, '.claude', 'md-to-skill-reinforcement-dedup.json')
+    dedup_path = _get_cache_path(cwd, 'reinforcement-dedup.json', 'md-to-skill-reinforcement-dedup.json')
     if not os.path.exists(dedup_path):
         return {}
     try:
@@ -194,7 +210,7 @@ def _load_dedup(cwd: str) -> dict:
 
 def _save_dedup(cwd: str, data: dict):
     """Save dedup tracking."""
-    dedup_path = os.path.join(cwd, '.claude', 'md-to-skill-reinforcement-dedup.json')
+    dedup_path = _get_cache_path(cwd, 'reinforcement-dedup.json', 'md-to-skill-reinforcement-dedup.json')
     try:
         os.makedirs(os.path.dirname(dedup_path), exist_ok=True)
         with open(dedup_path, 'w', encoding='utf-8') as f:

@@ -23,6 +23,7 @@ import json
 import sys
 import re
 import os
+import time
 import hashlib
 from pathlib import Path
 from datetime import datetime
@@ -86,7 +87,19 @@ def init_debug(cwd: str, debug_flag: bool):
 def get_session_state_path(cwd: str, transcript_path: str) -> str:
     """Get path for session state file based on transcript path."""
     transcript_hash = hashlib.md5(transcript_path.encode()).hexdigest()[:12]
-    return os.path.join(cwd, '.claude', f'md-to-skill-state-{transcript_hash}.json')
+    state_dir = os.path.join(cwd, '.claude', 'md-to-skill-state')
+    new_path = os.path.join(state_dir, f'{transcript_hash}.json')
+
+    # Auto-migrate from old flat layout
+    old_path = os.path.join(cwd, '.claude', f'md-to-skill-state-{transcript_hash}.json')
+    if os.path.exists(old_path) and not os.path.exists(new_path):
+        os.makedirs(state_dir, exist_ok=True)
+        try:
+            os.rename(old_path, new_path)
+        except OSError:
+            pass
+
+    return new_path
 
 
 def load_session_state(state_path: str) -> dict:
@@ -306,7 +319,19 @@ def check_file_quality(file_path: str, cwd: str, min_words: int) -> dict:
 
 def _get_obs_count_cache_path(cwd: str) -> str:
     """Get path to observation count cache file."""
-    return os.path.join(cwd, '.claude', 'md-to-skill-obs-count-cache.json')
+    cache_dir = os.path.join(cwd, '.claude', 'md-to-skill-cache')
+    new_path = os.path.join(cache_dir, 'obs-count-cache.json')
+
+    # Auto-migrate from old flat layout
+    old_path = os.path.join(cwd, '.claude', 'md-to-skill-obs-count-cache.json')
+    if os.path.exists(old_path) and not os.path.exists(new_path):
+        os.makedirs(cache_dir, exist_ok=True)
+        try:
+            os.rename(old_path, new_path)
+        except OSError:
+            pass
+
+    return new_path
 
 
 def _load_obs_count_cache(cwd: str) -> dict:
@@ -363,7 +388,17 @@ def count_observations_since_last_analysis(cwd: str) -> int:
 
     # Read last analyzed timestamp from state file
     last_ts = None
-    state_path = os.path.join(cwd, '.claude', 'md-to-skill-observe-state.json')
+    cache_dir = os.path.join(cwd, '.claude', 'md-to-skill-cache')
+    state_path = os.path.join(cache_dir, 'observe-state.json')
+
+    # Auto-migrate from old flat layout
+    old_state_path = os.path.join(cwd, '.claude', 'md-to-skill-observe-state.json')
+    if os.path.exists(old_state_path) and not os.path.exists(state_path):
+        os.makedirs(cache_dir, exist_ok=True)
+        try:
+            os.rename(old_state_path, state_path)
+        except OSError:
+            pass
     try:
         if os.path.exists(state_path):
             with open(state_path, 'r', encoding='utf-8') as f:
@@ -435,6 +470,32 @@ def _build_observe_hint(obs_count: int, auto_count: int) -> str:
     return auto_hint
 
 
+def cleanup_stale_files(cwd: str, max_age_hours: int = 48):
+    """Clean up stale state files (>max_age_hours) and leftover old flat files."""
+    claude_dir = os.path.join(cwd, '.claude')
+    max_age_secs = max_age_hours * 3600
+    now = time.time()
+
+    # Clean new subdirectory
+    state_dir = os.path.join(claude_dir, 'md-to-skill-state')
+    if os.path.isdir(state_dir):
+        try:
+            for entry in os.scandir(state_dir):
+                if entry.is_file() and now - entry.stat().st_mtime > max_age_secs:
+                    os.remove(entry.path)
+        except Exception:
+            pass
+
+    # Clean leftover old flat files
+    try:
+        for entry in os.scandir(claude_dir):
+            if entry.is_file() and entry.name.startswith('md-to-skill-state-'):
+                if now - entry.stat().st_mtime > max_age_secs:
+                    os.remove(entry.path)
+    except Exception:
+        pass
+
+
 def main():
     """Main entry point for the stop hook."""
     try:
@@ -471,6 +532,9 @@ def main():
         # Initialize debug mode
         init_debug(cwd, debug_flag)
         debug_log(f"Config: watchEnabled={watch_cfg.get('enabled')}, minWords={watch_cfg.get('minWords')}")
+
+        # Clean up stale state files
+        cleanup_stale_files(cwd)
 
         if not watch_cfg.get('enabled', True):
             debug_log("EXIT: watchEnabled=False (disabled)")

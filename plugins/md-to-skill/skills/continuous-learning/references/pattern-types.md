@@ -430,14 +430,216 @@ action: "Include error boundary wrapper in the initial template"
 domain: architecture
 ```
 
+## Import Frequency Patterns (Structural)
+
+### What It Detects
+
+Consistent module import conventions per file type, extracted from structural code analysis of Write operations.
+
+### How Observations Are Structured
+
+Structural observations are stored in `.claude/md-to-skill-structural.jsonl`:
+
+```json
+{
+  "timestamp": "2026-02-10T10:00:00",
+  "tool": "Write",
+  "structural": {
+    "file_path": "src/auth.service.ts",
+    "operation": "create",
+    "imports": [
+      {"module": "@angular/core", "names": ["Injectable"]},
+      {"module": "@angular/common/http", "names": ["HttpClient"]}
+    ],
+    "functions": [...],
+    "classes": [{"name": "AuthService", "extends": null, "implements": []}],
+    "metrics": {"lines": 45, "function_count": 3, "class_count": 1}
+  },
+  "session_id": "abc123"
+}
+```
+
+The system groups imports by file suffix pattern (`.service.ts`, `.component.ts`, etc.) and counts module frequency.
+
+### Detection Criteria
+
+An import pattern is detected when:
+- The same import module appears in 5+ file creations of the same suffix type
+- Consistency rate is >80% (module present in >80% of files of that type)
+- Pattern appears across 2+ sessions
+
+### Generated Instinct
+
+```yaml
+id: service-imports-injectable
+trigger: "when creating Angular service files (.service.ts)"
+action: "Always import Injectable from @angular/core"
+domain: import-pattern
+```
+
+### Example
+
+Observations show 8 `.service.ts` file creations. 7 of them import `Injectable` from `@angular/core` (87.5% consistency). The system generates an import-pattern instinct at confidence 0.3.
+
+## Signature Convention Patterns (Structural)
+
+### What It Detects
+
+Consistent function return type and parameter patterns per file type, extracted from structural function signature analysis.
+
+### How Observations Are Structured
+
+Function signatures are extracted from Write operations:
+
+```json
+{
+  "structural": {
+    "functions": [
+      {"name": "getUser", "params": 1, "return_type": "Observable<User>", "is_async": false},
+      {"name": "updateUser", "params": 2, "return_type": "Observable<void>", "is_async": false}
+    ]
+  }
+}
+```
+
+The system groups return types by file suffix pattern and analyzes frequency.
+
+### Detection Criteria
+
+A signature convention is detected when:
+- The same return type pattern appears in 5+ functions across files of the same type
+- Pattern spans 2+ sessions
+- Return type is non-trivial (not `void`, `any`, or `undefined`)
+
+### Generated Instinct
+
+```yaml
+id: service-returns-observable
+trigger: "when writing service methods"
+action: "Return Observable<T> from service methods, not Promise<T>"
+domain: signature-convention
+```
+
+### Example
+
+Across 6 `.service.ts` files, 12 out of 15 functions return `Observable<T>`. The system detects an 80% convention for Observable return types in services.
+
+## Decorator Preference Patterns (Structural)
+
+### What It Detects
+
+Consistent framework decorator/attribute usage per file type, extracted from structural analysis.
+
+### How Observations Are Structured
+
+Decorators are extracted from Write operations:
+
+```json
+{
+  "structural": {
+    "decorators": [
+      {"name": "Component", "target": "AuthComponent"},
+      {"name": "Injectable", "target": "AuthService"}
+    ]
+  }
+}
+```
+
+The system counts decorator frequency per file suffix type.
+
+### Detection Criteria
+
+A decorator preference is detected when:
+- The same decorator appears in 5+ files of the same suffix type
+- Pattern spans 2+ sessions
+- Decorator is framework-specific (not generic utility decorators)
+
+### Generated Instinct
+
+```yaml
+id: component-onpush-detection
+trigger: "when creating Angular components"
+action: "Use ChangeDetectionStrategy.OnPush in @Component decorator"
+domain: decorator-usage
+```
+
+### Example
+
+7 `.component.ts` files all have `@Component` decorator. 6 of them include `ChangeDetectionStrategy.OnPush`. The system detects 85% OnPush usage pattern.
+
+## Structural Correction Patterns (Structural)
+
+### What It Detects
+
+Structural elements that users consistently correct after initial file generation. These are the highest-value structural patterns because they directly reveal generation quality gaps.
+
+### How Observations Are Structured
+
+Edit operations with `is_correction: true` (Edit within 5 minutes of Write to same file) produce structural diffs:
+
+```json
+{
+  "tool": "Edit",
+  "structural": {
+    "file_path": "src/auth.service.ts",
+    "operation": "modify",
+    "added_imports": [{"module": "rxjs", "names": ["Subject"]}],
+    "removed_imports": [],
+    "added_functions": [],
+    "type_changes": [{"function": "getUser", "old_return": "Promise<User>", "new_return": "Observable<User>"}],
+    "change_category": "import_fix",
+    "is_correction": true
+  }
+}
+```
+
+The `change_category` field classifies the structural change:
+- `import_fix` — Only imports were modified
+- `type_change` — Return types or parameter types were changed
+- `decorator_change` — Decorators/attributes were added/removed
+- `function_change` — Functions were added/removed
+- `structural_addition` — Both imports and functions added
+- `mixed` — Multiple structural change types
+
+### Detection Criteria
+
+A structural correction pattern is detected when:
+- The same `change_category` appears in 3+ correction observations
+- Pattern spans 2+ sessions
+- Higher priority than generic user corrections (richer structural evidence)
+
+### Generated Instinct
+
+```yaml
+id: fix-missing-imports-after-write
+trigger: "when creating new TypeScript files"
+action: "Include all necessary imports in the initial file write — user consistently adds them after"
+domain: structural-correction
+```
+
+```yaml
+id: fix-promise-to-observable
+trigger: "when creating Angular service methods"
+action: "Use Observable<T> return type instead of Promise<T> — user always corrects this"
+domain: structural-correction
+```
+
+### Example
+
+Across 5 sessions, the user corrected generated files 4 times with `change_category: "import_fix"`. Each time, missing imports were added within 2 minutes of the Write. The system creates a structural-correction instinct about including complete imports upfront.
+
 ## Pattern Priority
 
 When multiple patterns compete for instinct creation, prioritize:
 
 1. **Error-fix sequences** — highest value, prevent future errors
-2. **User corrections** — fix generation quality
-3. **Workflow sequences** — improve process efficiency
-4. **Tool preferences** — optimize tool usage
-5. **File patterns** — maintain consistency
-6. **Command patterns** — reduce repetitive typing
-7. **Edit patterns** — lowest priority, often noise
+2. **Structural correction patterns** — fix generation quality with rich structural evidence
+3. **User corrections** — fix generation quality (lightweight evidence)
+4. **Import frequency patterns** — ensure complete file generation
+5. **Signature convention patterns** — maintain API consistency
+6. **Decorator preference patterns** — enforce framework conventions
+7. **Workflow sequences** — improve process efficiency
+8. **Tool preferences** — optimize tool usage
+9. **File patterns** — maintain consistency
+10. **Command patterns** — reduce repetitive typing
+11. **Edit patterns** — lowest priority, often noise

@@ -114,6 +114,35 @@ Check back after working on some tasks.
 ```
 Exit.
 
+### Step 1b: Load Structural Observations
+
+Read `.claude/md-to-skill-structural.jsonl` line by line. Each line contains structural code elements:
+
+```json
+{
+  "timestamp": "2026-02-10T10:00:00",
+  "tool": "Write",
+  "structural": {
+    "file_path": "src/auth.service.ts",
+    "operation": "create",
+    "imports": [{"module": "@angular/core", "names": ["Injectable"]}],
+    "functions": [{"name": "getUser", "params": 1, "return_type": "Observable<User>", "is_async": false}],
+    "classes": [{"name": "AuthService", "extends": null, "implements": []}],
+    "decorators": [{"name": "Injectable", "target": "AuthService"}],
+    "metrics": {"lines": 45, "function_count": 3, "class_count": 1}
+  },
+  "session_id": "abc123"
+}
+```
+
+**Correlation:** Match structural observations with lightweight observations (Step 1) by:
+- Matching `timestamp` within 2 seconds AND same `session_id`
+- This enriches lightweight observations with structural data
+
+**Apply the same filtering** (replay/since/state) as Step 1 using the same cutoff timestamp.
+
+If the file does not exist: skip structural analysis (the hook may not have been active yet). Continue with lightweight-only patterns.
+
 ### Step 2: Load Existing Instincts
 
 Use Glob to find all instinct files in both directories:
@@ -164,6 +193,61 @@ Look for these pattern types in the observations:
 **Naming conventions** (from `patterns.naming` field):
 - Consistent case styles across file operations
 - Example: All files use kebab-case → "prefer-kebab-case-naming"
+
+### Step 3b: Analyze Structural Patterns
+
+If structural observations were loaded in Step 1b, analyze these additional pattern types. Structural patterns carry richer evidence than lightweight observations, so they may produce higher-quality instincts.
+
+**Import frequency patterns** (domain: `import-pattern`):
+- Group structural observations by file suffix pattern (e.g., `.service.ts`, `.component.ts`)
+- Count import module frequency per suffix pattern
+- Detect: "When creating .service.ts files, always imports Injectable and HttpClient from @angular"
+- **Criteria:** same import module in 5+ file creations with >80% consistency, across 2+ sessions
+- **Instinct format:**
+  ```yaml
+  id: service-imports-injectable
+  trigger: "when creating Angular service files (.service.ts)"
+  action: "Always import Injectable from @angular/core"
+  domain: import-pattern
+  ```
+
+**Signature convention patterns** (domain: `signature-convention`):
+- Analyze return type and parameter patterns from function signatures, grouped by file type
+- Detect: "Functions in .service.ts files return Observable<T>" or "Handler functions take (req, res) params"
+- **Criteria:** same return type pattern in 5+ functions across 2+ sessions
+- **Instinct format:**
+  ```yaml
+  id: service-returns-observable
+  trigger: "when writing service methods"
+  action: "Return Observable<T> from service methods, not Promise<T>"
+  domain: signature-convention
+  ```
+
+**Decorator preference patterns** (domain: `decorator-usage`):
+- Count decorator usage frequency by file type suffix
+- Detect: "Components always use @Component with ChangeDetectionStrategy.OnPush"
+- **Criteria:** same decorator in 5+ files of the same type, across 2+ sessions
+- **Instinct format:**
+  ```yaml
+  id: component-onpush-detection
+  trigger: "when creating Angular components"
+  action: "Use ChangeDetectionStrategy.OnPush in @Component decorator"
+  domain: decorator-usage
+  ```
+
+**Structural correction patterns** (domain: `structural-correction`):
+- Analyze structural diffs where `is_correction: true` (Edit shortly after Write)
+- Look at `change_category`: what structural elements the user consistently corrects
+- Detect: "User always adds missing async keyword" or "User always fixes import statements after file creation"
+- **Higher priority** than generic user corrections — richer structural evidence
+- **Criteria:** same `change_category` correction 3+ times across 2+ sessions
+- **Instinct format:**
+  ```yaml
+  id: fix-missing-imports-after-write
+  trigger: "when creating new TypeScript files"
+  action: "Include all necessary imports in the initial file write — user consistently adds them after"
+  domain: structural-correction
+  ```
 
 **For complex patterns that need deeper analysis**, delegate to the learning-observer agent:
 
@@ -363,6 +447,10 @@ Auto-approved instincts represent strong, validated patterns that should be trea
   - arrow-functions-preferred (code-style) at {initialConfidence}
   - test-before-commit (workflow) at {initialConfidence}
 
+**Structural patterns detected:** {count}
+  - service-imports-injectable (import-pattern) at {initialConfidence}
+  - component-onpush-detection (decorator-usage) at {initialConfidence}
+
 **Auto-approved:** {count}
   - always-run-tests (0.8) — now active
 
@@ -416,6 +504,10 @@ Use these standard domain tags:
 - `architecture` — Structural preferences, module organization
 - `documentation` — Comment style, doc generation patterns
 - `naming` — File naming, variable naming conventions
+- `import-pattern` — Module import conventions per file type (structural)
+- `signature-convention` — Function parameter/return type patterns (structural)
+- `decorator-usage` — Framework decorator preferences (structural)
+- `structural-correction` — Structural elements consistently corrected after generation (structural)
 
 ## Error Handling
 

@@ -29,7 +29,7 @@ def _load_defaults() -> dict:
 def _fallback_defaults() -> dict:
     """Hardcoded fallback if defaults.json is missing. Must match defaults.json."""
     return {
-        "version": "0.7.0",
+        "version": "0.8.0",
         "observer": {
             "enabled": True,
             "maxObservationsMB": 10,
@@ -49,7 +49,31 @@ def _fallback_defaults() -> dict:
                 "Bash": 1.0,
                 "Read": 0.2
             },
-            "sessionCacheTTLHours": 4
+            "sessionCacheTTLHours": 4,
+            "structural": {
+                "enabled": True,
+                "maxContentBytes": 51200,
+                "maxCommandLength": 2000,
+                "languages": {
+                    "ts": [".ts", ".tsx", ".js", ".jsx", ".mjs"],
+                    "py": [".py"],
+                    "cs": [".cs"]
+                },
+                "capturePatterns": {
+                    "imports": True,
+                    "functionSignatures": True,
+                    "classNames": True,
+                    "decorators": True,
+                    "exports": True,
+                    "structuralDiffs": True,
+                    "bashFullCommand": True
+                },
+                "maxStructuralObservationsMB": 10,
+                "secretCommandPatterns": [
+                    r"--token=\S+", r"--password=\S+", r"API_KEY=\S+",
+                    r"Bearer\s+\S+", r"--secret=\S+"
+                ]
+            }
         },
         "instincts": {
             "initialConfidence": 0.3,
@@ -120,6 +144,9 @@ def _parse_local_md_frontmatter(cwd: str) -> dict:
             'autoApproveThreshold': ('instincts', 'autoApproveThreshold'),
             'confidenceDecayPerWeek': ('instincts', 'confidenceDecay', 'decayPerWeek'),
             'maxInstincts': ('instincts', 'maxInstincts'),
+            'structuralEnabled': ('observer', 'structural', 'enabled'),
+            'maxContentBytes': ('observer', 'structural', 'maxContentBytes'),
+            'maxCommandLength': ('observer', 'structural', 'maxCommandLength'),
             'debug': ('debug',),
         }
 
@@ -212,6 +239,11 @@ def get_watch_config(config: dict) -> dict:
 def get_evolution_config(config: dict) -> dict:
     """Extract evolution section from config."""
     return config.get('evolution', {})
+
+
+def get_structural_config(config: dict) -> dict:
+    """Extract structural observation section from observer config."""
+    return config.get('observer', {}).get('structural', {})
 
 
 def get_integration_config(config: dict) -> dict:

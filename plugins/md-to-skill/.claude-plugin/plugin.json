@@ -1,6 +1,6 @@
 {
   "name": "md-to-skill",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "description": "Continuous learning engine for Claude Code. Automatically observes coding patterns, builds instincts from repeated behaviors, and evolves validated instincts into reusable skills. Also converts markdown files into organized Claude skills.",
   "author": {
     "name": "FlowAccount Developer",

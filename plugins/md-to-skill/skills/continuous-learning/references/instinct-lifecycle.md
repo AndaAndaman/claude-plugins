@@ -233,3 +233,7 @@ Standard domain tags:
 - `error-handling` — Error recovery patterns
 - `architecture` — Structural preferences
 - `documentation` — Comment and doc generation patterns
+- `import-pattern` — Module import conventions per file type (from structural analysis)
+- `signature-convention` — Function parameter/return type patterns (from structural analysis)
+- `decorator-usage` — Framework decorator preferences (from structural analysis)
+- `structural-correction` — Structural elements consistently corrected after generation (from structural analysis)

@@ -85,6 +85,16 @@ def _migrate_cache_file(cwd: str, old_name: str, new_name: str) -> str:
     return new_path
 
 
+def get_structural_observations_path(cwd: str) -> str:
+    """Get path to structural observations JSONL file."""
+    return os.path.join(cwd, '.claude', 'md-to-skill-structural.jsonl')
+
+
+def get_structural_cache_path(cwd: str) -> str:
+    """Get path to structural cache file (with migration from flat layout)."""
+    return _migrate_cache_file(cwd, 'md-to-skill-structural-cache.json', 'structural-cache.json')
+
+
 def get_session_cache_path(cwd: str) -> str:
     """Get path to lightweight session cache for tracking recent writes."""
     return _migrate_cache_file(cwd, 'md-to-skill-session-cache.json', 'session-cache.json')

@@ -1,5 +1,5 @@
 {
-  "version": "0.7.0",
+  "version": "0.8.0",
   "observer": {
     "enabled": true,
     "maxObservationsMB": 10,
@@ -19,7 +19,31 @@
       "Bash": 1.0,
       "Read": 0.2
     },
-    "sessionCacheTTLHours": 4
+    "sessionCacheTTLHours": 4,
+    "structural": {
+      "enabled": true,
+      "maxContentBytes": 51200,
+      "maxCommandLength": 2000,
+      "languages": {
+        "ts": [".ts", ".tsx", ".js", ".jsx", ".mjs"],
+        "py": [".py"],
+        "cs": [".cs"]
+      },
+      "capturePatterns": {
+        "imports": true,
+        "functionSignatures": true,
+        "classNames": true,
+        "decorators": true,
+        "exports": true,
+        "structuralDiffs": true,
+        "bashFullCommand": true
+      },
+      "maxStructuralObservationsMB": 10,
+      "secretCommandPatterns": [
+        "--token=\\S+", "--password=\\S+", "API_KEY=\\S+",
+        "Bearer\\s+\\S+", "--secret=\\S+"
+      ]
+    }
   },
   "instincts": {
     "initialConfidence": 0.3,

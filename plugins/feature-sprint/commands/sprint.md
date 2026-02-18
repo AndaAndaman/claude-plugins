@@ -1,6 +1,6 @@
 ---
 name: sprint
-description: "Full-lifecycle MVP feature development using Agent Teams. Analysts discuss and challenge, implementers execute in parallel, reviewer verifies quality."
+description: "Full-lifecycle MVP feature development using Agent Teams. PM/PO sizes scope first, then routes to the right-sized workflow: tiny (direct fix) through large (full team)."
 arguments:
   - name: feature
     description: "Short description of the feature to implement"
@@ -28,14 +28,14 @@ allowed-tools:
 
 # Sprint Command - Team Lead
 
-You are the **sprint team lead**. You orchestrate a full feature development lifecycle using Agent Teams.
+You are the **sprint team lead**. You orchestrate feature development with the right-sized workflow based on scope assessment.
 
 **Feature**: {{ feature }}
 **Plan Only**: {{ plan-only | default: false }}
 
 ## Phase 0: Generate Unique Team Name
 
-Before anything else, generate a unique team name to avoid collisions with other sprint sessions:
+Generate a unique team name:
 
 ```
 TEAM_NAME = "sprint-" + slugify(first 3-4 words of feature) + "-" + timestamp_suffix
@@ -43,61 +43,145 @@ TEAM_NAME = "sprint-" + slugify(first 3-4 words of feature) + "-" + timestamp_su
 
 **Examples:**
 - `"Add logout button"` → `sprint-add-logout-button-1a2b`
-- `"Dark mode toggle in settings"` → `sprint-dark-mode-toggle-3c4d`
+- `"Fix typo in README"` → `sprint-fix-typo-readme-3c4d`
 
-The timestamp suffix should be the last 4 characters of the current timestamp (or random hex). This ensures uniqueness even for identically-named features.
+The timestamp suffix should be the last 4 characters of the current timestamp (or random hex).
 
 **Store this team name** - use it consistently for ALL team operations in this sprint.
 
-## Phase 1: Create Team & Analysis Tasks
-
-```
-Creating sprint team for: "{{ feature }}"
-```
+## Phase 1: Scope Assessment (PM/PO Agent)
 
 **Create the team:**
 ```
 TeamCreate(team_name: TEAM_NAME, description: "Sprint: {{ feature }}")
 ```
 
-**Create 3 analysis tasks** using TaskCreate:
+**Create scope assessment task:**
+```
+TaskCreate: "Assess scope for: {{ feature }}"
+```
 
-1. **Scout task**: "Scout codebase for {{ feature }}" - Find target files, patterns, related code
-2. **Guard task**: "Guard risks for {{ feature }}" - Identify risks and mitigations
-3. **Tester task**: "Define tests for {{ feature }}" - Manual verification and test strategy
+**Spawn PM/PO agent:**
+```
+Task(feature-sprint:pm)
+  team_name: TEAM_NAME
+  name: "pm"
+  prompt: "Feature: {{ feature }}
+           Assess the scope of this feature by searching the codebase.
+           Claim your task from TaskList, analyze, and message the team lead with your Scope Brief."
+```
 
-Each task description should include the full feature context: `{{ feature }}`
+Wait for PM/PO to complete and read their Scope Brief.
 
-## Phase 2: Spawn Analysts (Parallel)
+## Phase 2: User Scope Confirmation
+
+Present the scope assessment to the user:
+
+```
+Scope Assessment: "{{ feature }}"
+  Scope: [TINY/SMALL/MEDIUM/LARGE/HUGE]
+  Affected files: [count]
+  Rationale: [from PM/PO]
+```
+
+Ask using AskUserQuestion:
+```
+The PM/PO assessed this as [SCOPE]. Proceed with this routing?
+- "Yes, proceed with [SCOPE] workflow" (Recommended)
+- "Override: treat as [different scope]"
+```
+
+**Shutdown PM/PO agent** after scope is confirmed.
+
+Then route to the appropriate workflow phase based on confirmed scope:
+
+---
+
+## Route: TINY → Direct Fix
+
+**No additional agents needed.** You (the lead) handle it directly.
+
+1. Read the affected file(s) identified by PM/PO
+2. Make the change using Edit tool
+3. Present the result to user
+4. Cleanup team (TeamDelete) and STOP
+
+**Skip all remaining phases.**
+
+---
+
+## Route: SMALL → Scout + 1 Implementer
+
+### Small Phase A: Scout Only
+
+Create scout task and spawn:
+```
+Task(feature-sprint:scout)
+  team_name: TEAM_NAME
+  name: "scout"
+  prompt: "Feature: {{ feature }}
+           Claim your task, find the target location and pattern, message team lead with Location Brief."
+```
+
+Wait for scout, read Location Brief, shutdown scout.
+
+### Small Phase B: Mini Brief
+
+Synthesize a lightweight brief from scout output only:
+
+```markdown
+IMPLEMENTATION BRIEF: [Feature Name]
+
+## Location (from Scout)
+**Target**: `[primary file path]`
+**Type**: [Create New | Modify Existing]
+**Pattern**: Follow `[reference file]`
+
+## Implementation Checklist
+1. [ ] [Single task based on location]
+2. [ ] Verify change works
+```
+
+If `--plan-only`: present brief, cleanup, STOP.
+
+### Small Phase C: Implement
+
+Create 1 implementation task and spawn 1 implementer:
+```
+Task(feature-sprint:implementer)
+  team_name: TEAM_NAME
+  name: "implementer-1"
+  prompt: "Claim your task and implement the work package. Message team lead when done."
+```
+
+Wait for completion. **No reviewer needed** for small scope.
+
+### Small Phase D: Cleanup
+
+Shutdown implementer, TeamDelete, present summary.
+
+---
+
+## Route: MEDIUM → Full Analysis + 1 Implementer
+
+### Medium Phase A: Parallel Analysis
 
 **CRITICAL**: Spawn all 3 agents in a SINGLE message with multiple Task tool calls.
 
+Create 3 analysis tasks, then spawn:
 ```
-Analyzing: "{{ feature }}"
-  Scout: Finding location...
-  Guard: Checking risks...
-  Tester: Defining verification...
-```
-
-Spawn each with:
-- `team_name: TEAM_NAME`
-- `name: "scout"`, `"guard"`, `"tester"` respectively
-- `subagent_type: "feature-sprint:scout"`, `"feature-sprint:guard"`, `"feature-sprint:tester"`
-- Prompt: Include the feature description and tell them to claim their task from TaskList
-
-Example prompt for scout:
-```
-Feature: "{{ feature }}"
-You are working in a sprint team. Check TaskList for your analysis task, claim it,
-perform your analysis, and message the team lead with your Location Brief.
-Also check if other analysts have findings you can cross-reference.
+Task(feature-sprint:scout)  → name: "scout"
+Task(feature-sprint:guard)  → name: "guard"
+Task(feature-sprint:tester) → name: "tester"
 ```
 
-**Wait for all 3 to complete.** They may message each other during analysis to discuss and challenge findings.
+Each with team_name and prompt including `{{ feature }}`.
 
-## Phase 3: Synthesize Brief
+Wait for all 3 to complete.
 
-After all analysts complete, read their task outputs and messages. Synthesize into:
+### Medium Phase B: Synthesize Brief
+
+Combine outputs into full implementation brief:
 
 ```markdown
 IMPLEMENTATION BRIEF: [Feature Name]
@@ -126,40 +210,63 @@ Automated: `[test file suggestion]`
 ## Implementation Checklist
 1. [ ] [Task based on location + risks]
 2. [ ] [Task]
-3. [ ] [Task]
-4. [ ] Run verification
+3. [ ] Run verification
 ```
 
-**Shutdown analysts** to save tokens - send shutdown_request to scout, guard, tester.
+Shutdown analysts.
 
-## Phase 4: User Approval
+If `--plan-only`: present brief, cleanup, STOP.
 
-Present the brief to the user.
+### Medium Phase C: User Approval
 
-If `--plan-only` is true:
-- Present the brief, cleanup the team (TeamDelete), and STOP
-- Do NOT ask about implementation
-
-Otherwise, ask using AskUserQuestion:
+Ask using AskUserQuestion:
 ```
 Ready to implement this feature?
 - "Yes, implement" (Recommended)
 - "No, just the plan"
 ```
 
-If user says no: cleanup and stop.
+If no: cleanup and stop.
 
-## Phase 5: Scope Split
+### Medium Phase D: Implement
+
+Create 1 implementation task with full brief, spawn 1 implementer. **No reviewer** for medium scope.
+
+Wait for completion.
+
+### Medium Phase E: Cleanup
+
+Shutdown implementer, TeamDelete, present summary with verification steps.
+
+---
+
+## Route: LARGE → Full Team
+
+### Large Phase A: Parallel Analysis
+
+Same as Medium Phase A - spawn Scout + Guard + Tester in parallel.
+
+Wait for all 3.
+
+### Large Phase B: Synthesize Brief
+
+Same full brief format as Medium Phase B.
+
+Shutdown analysts.
+
+If `--plan-only`: present brief, cleanup, STOP.
+
+### Large Phase C: User Approval
+
+Same as Medium Phase C.
+
+### Large Phase D: Scope Split
 
 Analyze the brief to divide work into packages by **file ownership**:
 
 **Sizing rules:**
-- **1 file, small change** (add function, fix bug, minor edit) → 1 implementer
-- **1-2 files, moderate change** → 1 implementer
 - **2-3 files in different modules** → 2 implementers
 - **4+ files or cross-layer changes** → 3 implementers
-
-**Default to fewer implementers.** Only spawn multiple when files are in genuinely separate modules and benefit from parallel work. A single implementer is fine for most features.
 
 **Each package gets:**
 - Exclusive file list (no overlap between packages)
@@ -185,92 +292,81 @@ Create implementation tasks with TaskCreate. Each task description includes:
 **Full Brief**: [embed the synthesized brief]
 ```
 
-## Phase 6: Spawn Implementers (Parallel)
+### Large Phase E: Spawn Implementers (Parallel)
 
-Spawn all implementers in a SINGLE message (if multiple). If only 1 implementer, just spawn one.
-
+Spawn all implementers in a SINGLE message:
 ```
-Implementing: "{{ feature }}"
-  implementer-1: [files]
-  (implementer-2: [files])  ← only if needed
+Task(feature-sprint:implementer) → name: "implementer-1"
+Task(feature-sprint:implementer) → name: "implementer-2"
+(Task(feature-sprint:implementer) → name: "implementer-3")  ← only if needed
 ```
 
-Spawn each with:
-- `team_name: TEAM_NAME`
-- `name: "implementer-1"` (and `"implementer-2"`, `"implementer-3"` if needed)
-- `subagent_type: "feature-sprint:implementer"`
-- Prompt: Tell them to check TaskList, claim their task, implement their work package
+Wait for all implementers.
 
-Wait for all implementers to complete.
+### Large Phase F: Code Review
 
-## Phase 7: Code Review
-
-**Only spawn reviewer when 2+ implementers were used.** When multiple implementers work in parallel, their code must be validated as a whole to ensure it integrates correctly.
-
-If only 1 implementer was used: **skip this phase** - the code is self-contained, no integration risk.
-
-If 2+ implementers were used:
-
-Create a review task with TaskCreate containing:
-- The full implementation brief
-- List of all implementer tasks and their files
-- **Key focus: verify the combined code works end-to-end** - imports resolve, interfaces match, data flows correctly across file boundaries
+Create review task containing full brief and all implementer file lists.
 
 Spawn reviewer:
-- `team_name: TEAM_NAME`
-- `name: "reviewer"`
-- `subagent_type: "feature-sprint:reviewer"`
-- Prompt: "Multiple implementers worked on this feature. Review all code with special focus on integration: do the pieces fit together? Check imports, shared types, function signatures match across files, and the overall feature works end-to-end when combined."
-
-Wait for reviewer to complete and send their report.
-
-## Phase 8: Handle Review Results
-
-If reviewer reports **APPROVED**:
-- Present success to user with summary of changes
-- Guide through manual verification steps from the brief
-
-If reviewer reports **NEEDS CHANGES**:
-- Present issues to user
-- Ask if they want to fix manually or re-run implementers on the flagged files
-
-## Phase 9: Cleanup
-
-1. **Shutdown all remaining teammates** - Send shutdown_request to each active agent
-2. **Delete team** - Use TeamDelete to clean up team and task files
-3. **Present final summary**:
-
 ```
-Sprint Complete: "{{ feature }}"
-  Files changed: [list]
-  Risks mitigated: [count]
-  Review: [APPROVED/NEEDS CHANGES]
-  Next: Run manual verification steps above
+Task(feature-sprint:reviewer)
+  team_name: TEAM_NAME
+  name: "reviewer"
+  prompt: "Multiple implementers worked on this feature. Review all code with focus on integration."
 ```
+
+Wait for reviewer.
+
+### Large Phase G: Handle Review Results
+
+If **APPROVED**: present success with summary and verification steps.
+If **NEEDS CHANGES**: present issues, ask user if they want to fix manually or re-run.
+
+### Large Phase H: Cleanup
+
+Shutdown all remaining agents, TeamDelete, present final summary.
+
+---
+
+## Route: HUGE → Warn and Stop
+
+**Do NOT proceed with implementation.**
+
+Present to user:
+```
+This feature is assessed as HUGE scope (system-wide / architectural change).
+
+A single sprint cannot safely handle this. Here are the PM/PO's decomposition suggestions:
+
+[Include decomposition suggestions from PM/PO Scope Brief]
+
+Recommendation: Run /sprint on each sub-feature individually, starting with the foundation piece.
+```
+
+Cleanup team (TeamDelete) and STOP.
+
+---
 
 ## Error Handling
 
+- If PM/PO fails: default to MEDIUM workflow (safe middle ground)
 - If an analyst fails: proceed with available analysis, note the gap
 - If an implementer fails: present partial results, suggest manual completion
 - If reviewer fails: skip review, present implementation summary directly
 - Always cleanup the team, even on failure
 
-## Team Lifecycle Summary
+## Workflow Summary
 
 ```
 /sprint "feature"
-    |
-    |-- Phase 1-2: Create team, spawn Scout + Guard + Tester
-    |   (analysts discuss & challenge each other)
-    |
-    |-- Phase 3: Synthesize brief, shutdown analysts
-    |
-    |-- Phase 4: Present brief, get user approval
-    |
-    |-- Phase 5-6: Split scope, spawn implementers
-    |   (implementers coordinate interface contracts)
-    |
-    |-- Phase 7-8: Spawn reviewer, handle results
-    |
-    |-- Phase 9: Cleanup team
+    │
+    ├── Phase 0: Generate team name
+    ├── Phase 1: PM/PO scope assessment
+    ├── Phase 2: User confirms/overrides scope
+    │
+    ├── TINY:   Lead does it directly → Done
+    ├── SMALL:  Scout → 1 implementer → Done
+    ├── MEDIUM: Scout+Guard+Tester → brief → 1 implementer → Done
+    ├── LARGE:  Scout+Guard+Tester → brief → 2-3 implementers → reviewer → Done
+    └── HUGE:   Show decomposition → STOP
 ```

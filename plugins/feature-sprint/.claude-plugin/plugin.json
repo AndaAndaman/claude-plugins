@@ -1,6 +1,6 @@
 {
   "name": "feature-sprint",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Full-lifecycle feature development using Agent Teams. Analysts (Scout, Guard, Tester) discuss and challenge each other, then Implementers execute in parallel with code review.",
   "author": {
     "name": "FlowAccount Developer",

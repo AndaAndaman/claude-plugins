@@ -383,6 +383,9 @@ def scan_transcript(transcript_path: str, cwd: str, start_line: int = 0,
                             # Strip cwd prefix to get relative path
                             if file_path.startswith(normalized_cwd):
                                 file_path = file_path[len(normalized_cwd):].lstrip(os.sep)
+                            elif os.path.isabs(file_path):
+                                # File is outside project root — skip it
+                                continue
 
                             if file_path not in seen_paths:
                                 seen_paths.add(file_path)

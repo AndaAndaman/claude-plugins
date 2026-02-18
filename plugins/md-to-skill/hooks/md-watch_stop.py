@@ -238,8 +238,8 @@ def is_excluded_file(file_path: str, exclude_patterns: list) -> bool:
     return False
 
 
-def is_inside_skill_directory(file_path: str) -> bool:
-    """Check if file is already inside a skill directory."""
+def is_inside_plugin_directory(file_path: str) -> bool:
+    """Check if file is inside a skill, agent, or command directory (not a skill candidate)."""
     normalized = file_path.replace('\\', '/')
     parts = normalized.split('/')
 
@@ -247,9 +247,10 @@ def is_inside_skill_directory(file_path: str) -> bool:
     if os.path.basename(file_path) == 'SKILL.md':
         return True
 
-    # Check if path contains /skills/ directory
+    # Directories that contain plugin components, not skill candidates
+    plugin_dirs = {'skills', 'agents', 'commands', 'hooks', '.claude-plugin'}
     for i, part in enumerate(parts):
-        if part == 'skills' and i < len(parts) - 1:
+        if part in plugin_dirs and i < len(parts) - 1:
             return True
 
     # Check for .local.md files
@@ -589,9 +590,9 @@ def main():
                 debug_log(f"  SKIP (excluded pattern): {file_path}")
                 continue
 
-            # Skip files inside skill directories
-            if is_inside_skill_directory(file_path):
-                debug_log(f"  SKIP (skill directory): {file_path}")
+            # Skip files inside plugin component directories (skills, agents, commands, hooks)
+            if is_inside_plugin_directory(file_path):
+                debug_log(f"  SKIP (plugin component): {file_path}")
                 continue
 
             # Skip already suggested files

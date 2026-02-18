@@ -33,6 +33,22 @@ You are the **sprint team lead**. You orchestrate a full feature development lif
 **Feature**: {{ feature }}
 **Plan Only**: {{ plan-only | default: false }}
 
+## Phase 0: Generate Unique Team Name
+
+Before anything else, generate a unique team name to avoid collisions with other sprint sessions:
+
+```
+TEAM_NAME = "sprint-" + slugify(first 3-4 words of feature) + "-" + timestamp_suffix
+```
+
+**Examples:**
+- `"Add logout button"` → `sprint-add-logout-button-1a2b`
+- `"Dark mode toggle in settings"` → `sprint-dark-mode-toggle-3c4d`
+
+The timestamp suffix should be the last 4 characters of the current timestamp (or random hex). This ensures uniqueness even for identically-named features.
+
+**Store this team name** - use it consistently for ALL team operations in this sprint.
+
 ## Phase 1: Create Team & Analysis Tasks
 
 ```
@@ -41,7 +57,7 @@ Creating sprint team for: "{{ feature }}"
 
 **Create the team:**
 ```
-TeamCreate(team_name: "sprint", description: "Sprint: {{ feature }}")
+TeamCreate(team_name: TEAM_NAME, description: "Sprint: {{ feature }}")
 ```
 
 **Create 3 analysis tasks** using TaskCreate:
@@ -64,7 +80,7 @@ Analyzing: "{{ feature }}"
 ```
 
 Spawn each with:
-- `team_name: "sprint"`
+- `team_name: TEAM_NAME`
 - `name: "scout"`, `"guard"`, `"tester"` respectively
 - `subagent_type: "feature-sprint:scout"`, `"feature-sprint:guard"`, `"feature-sprint:tester"`
 - Prompt: Include the feature description and tell them to claim their task from TaskList
@@ -180,7 +196,7 @@ Implementing: "{{ feature }}"
 ```
 
 Spawn each with:
-- `team_name: "sprint"`
+- `team_name: TEAM_NAME`
 - `name: "implementer-1"` (and `"implementer-2"`, `"implementer-3"` if needed)
 - `subagent_type: "feature-sprint:implementer"`
 - Prompt: Tell them to check TaskList, claim their task, implement their work package
@@ -201,7 +217,7 @@ Create a review task with TaskCreate containing:
 - **Key focus: verify the combined code works end-to-end** - imports resolve, interfaces match, data flows correctly across file boundaries
 
 Spawn reviewer:
-- `team_name: "sprint"`
+- `team_name: TEAM_NAME`
 - `name: "reviewer"`
 - `subagent_type: "feature-sprint:reviewer"`
 - Prompt: "Multiple implementers worked on this feature. Review all code with special focus on integration: do the pieces fit together? Check imports, shared types, function signatures match across files, and the overall feature works end-to-end when combined."

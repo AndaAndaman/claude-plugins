@@ -1,0 +1,17 @@
+{
+  "description": "Feature sprint hooks - load scope-aware sprint workflow context on session start",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/feature-sprint_session-start.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

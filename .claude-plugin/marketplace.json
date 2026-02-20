@@ -77,7 +77,7 @@
     },
     {
       "name": "feature-sprint",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "description": "Full-lifecycle feature development using Agent Teams. PM/PO sizes scope first, then routes to right-sized workflow: tiny (direct fix) through large (full team with review).",
       "source": "./plugins/feature-sprint",
       "author": {

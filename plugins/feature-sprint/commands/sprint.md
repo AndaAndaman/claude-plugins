@@ -110,9 +110,49 @@ Then route to the appropriate workflow phase based on confirmed scope:
 
 ---
 
-## Route: SMALL → Scout + 1 Implementer
+## Route: SMALL → 1 Implementer
 
-### Small Phase A: Scout Only
+**No analysis agents needed.** PM/PO already identified the affected file(s).
+
+### Small Phase A: Mini Brief
+
+Synthesize a lightweight brief from PM/PO scope output:
+
+```markdown
+IMPLEMENTATION BRIEF: [Feature Name]
+
+## Target
+**File**: `[from PM/PO affected files]`
+**Type**: [Create New | Modify Existing]
+
+## Implementation Checklist
+1. [ ] [Task based on PM/PO assessment]
+2. [ ] Verify change works
+```
+
+If `--plan-only`: present brief, cleanup, STOP.
+
+### Small Phase B: Implement
+
+Create 1 implementation task with the mini brief and spawn 1 implementer:
+```
+Task(feature-sprint:implementer)
+  team_name: TEAM_NAME
+  name: "implementer-1"
+  prompt: "Claim your task and implement the work package. Message team lead when done."
+```
+
+Wait for completion. **No reviewer needed** for small scope.
+
+### Small Phase C: Cleanup
+
+Shutdown implementer, TeamDelete, present summary.
+
+---
+
+## Route: MEDIUM → Scout + 1 Implementer
+
+### Medium Phase A: Scout Analysis
 
 Create scout task and spawn:
 ```
@@ -125,66 +165,16 @@ Task(feature-sprint:scout)
 
 Wait for scout, read Location Brief, shutdown scout.
 
-### Small Phase B: Mini Brief
-
-Synthesize a lightweight brief from scout output only:
-
-```markdown
-IMPLEMENTATION BRIEF: [Feature Name]
-
-## Location (from Scout)
-**Target**: `[primary file path]`
-**Type**: [Create New | Modify Existing]
-**Pattern**: Follow `[reference file]`
-
-## Implementation Checklist
-1. [ ] [Single task based on location]
-2. [ ] Verify change works
-```
-
-If `--plan-only`: present brief, cleanup, STOP.
-
-### Small Phase C: Implement
-
-Create 1 implementation task and spawn 1 implementer:
-```
-Task(feature-sprint:implementer)
-  team_name: TEAM_NAME
-  name: "implementer-1"
-  prompt: "Claim your task and implement the work package. Message team lead when done."
-```
-
-Wait for completion. **No reviewer needed** for small scope.
-
-### Small Phase D: Cleanup
-
-Shutdown implementer, TeamDelete, present summary.
-
----
-
-## Route: MEDIUM → Full Analysis + 1 Implementer
-
-### Medium Phase A: Parallel Analysis
-
-**CRITICAL**: Spawn all 3 agents in a SINGLE message with multiple Task tool calls.
-
-Create 3 analysis tasks, then spawn:
-```
-Task(feature-sprint:scout)  → name: "scout"
-Task(feature-sprint:guard)  → name: "guard"
-Task(feature-sprint:tester) → name: "tester"
-```
-
-Each with team_name and prompt including `{{ feature }}`.
-
-Wait for all 3 to complete.
-
 ### Medium Phase B: Synthesize Brief
 
-Combine outputs into full implementation brief:
+Synthesize brief from PM/PO scope + Scout location:
 
 ```markdown
 IMPLEMENTATION BRIEF: [Feature Name]
+
+## Scope (from PM/PO)
+**Level**: MEDIUM
+**Affected Files**: [count]
 
 ## Location (from Scout)
 **Target**: `[primary file path]`
@@ -195,25 +185,11 @@ Related Files:
 - `[file1]` - [why]
 - `[file2]` - [why]
 
-## Risks (from Guard)
-1. **[Risk]** [HIGH/MEDIUM] - Mitigation: [how]
-2. **[Risk]** [HIGH/MEDIUM] - Mitigation: [how]
-
-## Verification (from Tester)
-Manual:
-- [ ] [Step 1]
-- [ ] [Step 2]
-- [ ] [Step 3]
-
-Automated: `[test file suggestion]`
-
 ## Implementation Checklist
-1. [ ] [Task based on location + risks]
+1. [ ] [Task based on location]
 2. [ ] [Task]
-3. [ ] Run verification
+3. [ ] Verify change works
 ```
-
-Shutdown analysts.
 
 If `--plan-only`: present brief, cleanup, STOP.
 
@@ -230,13 +206,13 @@ If no: cleanup and stop.
 
 ### Medium Phase D: Implement
 
-Create 1 implementation task with full brief, spawn 1 implementer. **No reviewer** for medium scope.
+Create 1 implementation task with brief, spawn 1 implementer. **No reviewer** for medium scope.
 
 Wait for completion.
 
 ### Medium Phase E: Cleanup
 
-Shutdown implementer, TeamDelete, present summary with verification steps.
+Shutdown implementer, TeamDelete, present summary.
 
 ---
 
@@ -365,8 +341,8 @@ Cleanup team (TeamDelete) and STOP.
     ├── Phase 2: User confirms/overrides scope
     │
     ├── TINY:   Lead does it directly → Done
-    ├── SMALL:  Scout → 1 implementer → Done
-    ├── MEDIUM: Scout+Guard+Tester → brief → 1 implementer → Done
+    ├── SMALL:  1 implementer → Done
+    ├── MEDIUM: Scout → brief → 1 implementer → Done
     ├── LARGE:  Scout+Guard+Tester → brief → 2-3 implementers → reviewer → Done
     └── HUGE:   Show decomposition → STOP
 ```

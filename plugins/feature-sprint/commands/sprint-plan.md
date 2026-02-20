@@ -74,13 +74,20 @@ Just run: /sprint "{{ feature }}" to execute directly.
 Cleanup team and STOP.
 
 ### If SMALL scope:
+No further analysis needed. Use PM/PO's affected files directly for the brief.
+
+### If MEDIUM scope:
 Spawn Scout only:
 ```
 Task(feature-sprint:scout)
+  team_name: TEAM_NAME
+  name: "scout"
   prompt: "Feature: {{ feature }}. Find target location and pattern. Return Location Brief."
 ```
 
-### If MEDIUM, LARGE, or HUGE scope:
+Wait for scout. Shutdown scout.
+
+### If LARGE or HUGE scope:
 **CRITICAL**: Spawn all 3 agents in a SINGLE message with multiple Task tool calls:
 
 ```
@@ -130,11 +137,11 @@ Related Files:
 - `[file1]` - [why]
 - `[file2]` - [why]
 
-## Risks (from Guard) [if medium+ scope]
+## Risks (from Guard) [if large+ scope]
 1. **[Risk]** - [Mitigation]
 2. **[Risk]** - [Mitigation]
 
-## Verification (from Tester) [if medium+ scope]
+## Verification (from Tester) [if large+ scope]
 Manual:
 - [ ] [Step 1]
 - [ ] [Step 2]

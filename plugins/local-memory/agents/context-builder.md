@@ -111,11 +111,11 @@ use_mcp_tool(
 )
 ```
 
-This returns:
-- Generated CLAUDE.md markdown content with auto-generated markers
-- Structured with sections: Overview, Files, Patterns, Dependencies
-- Follows directory-summarization skill best practices
-- Concise summaries (1-2 sentences per file)
+This returns either:
+- **Generated content**: CLAUDE.md markdown with auto-generated markers, structured with sections: Overview, Files, Patterns, Dependencies
+- **Unchanged signal**: `{"unchanged": true, "message": "No files changed..."}` — **STOP here for this directory, skip Step 4. Report as "↩ Skipped (no changes)"**
+
+If `generate_context` returns JSON with `"unchanged": true`, do NOT call `write_context`. Move to the next directory or report results.
 
 ### Step 4: Write Context File
 
@@ -147,6 +147,7 @@ Provide clear feedback to the user:
 ```
 ✓ Built context for src/api (12 files documented)
 ✓ Built context for src/utils (8 files documented)
+↩ Skipped src/models (no changes)
 
 CLAUDE.md files created/updated. These will automatically load as context in future sessions.
 ```

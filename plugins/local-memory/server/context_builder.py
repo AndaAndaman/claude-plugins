@@ -935,6 +935,24 @@ async def handle_call_tool(name: str, arguments: Dict) -> List[TextContent]:
         cache["summaries"] = cached_summaries
         _save_summary_cache(directory, project_root, cache)
 
+        # Early exit: if all files hit cache and file list unchanged, nothing to regenerate
+        cached_file_set = set(cache.get("_file_list", []))
+        current_file_set = set(analysis["files"])
+        if cache_misses == 0 and cached_file_set == current_file_set:
+            return [TextContent(
+                type="text",
+                text=json.dumps({
+                    "unchanged": True,
+                    "directory": directory,
+                    "cache_hits": cache_hits,
+                    "message": "No files changed since last generation. Skipping regeneration."
+                })
+            )]
+
+        # Persist current file list for future unchanged detection
+        cache["_file_list"] = analysis["files"]
+        _save_summary_cache(directory, project_root, cache)
+
         # Generate content-aware overview
         dir_name = os.path.basename(directory.rstrip('/\\'))
         patterns = analysis.get("patterns", [])

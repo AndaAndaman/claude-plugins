@@ -39,9 +39,9 @@ def main():
 
 **Scope-based routing:**
 - **tiny**: Direct fix by lead (no agents needed)
-- **small**: Scout + 1 implementer
-- **medium**: Scout + Guard + Tester + 1 implementer
-- **large**: Full team with parallel implementers + reviewer
+- **small**: 1 implementer (PM/PO already identified files)
+- **medium**: Scout → brief → 1 implementer
+- **large**: Scout+Guard+Tester → brief → 2-3 implementers → reviewer
 - **huge**: Suggest decomposition, stop
 
 **How to recommend:** When a user describes a feature to implement, suggest: "This looks like a good candidate for `/sprint`. Want me to run a scope-assessed sprint for this?"

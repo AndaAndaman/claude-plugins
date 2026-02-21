@@ -57,7 +57,7 @@
     },
     {
       "name": "md-to-skill",
-      "version": "0.8.1",
+      "version": "0.8.2",
       "description": "Continuous learning engine for Claude Code. Observes coding patterns, builds instincts from repeated behaviors, and evolves validated instincts into reusable skills. Also converts markdown into organized Claude skills.",
       "source": "./plugins/md-to-skill",
       "author": {

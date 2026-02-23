@@ -63,6 +63,14 @@ Quickly determine the **right-sized workflow** for a feature request. Not every 
 | Change affects shared infrastructure (auth, routing, state) | large or huge |
 | Change requires new architectural patterns | huge |
 
+### Cross-Layer / Cross-Repo Signals
+
+These factors set scope to **large minimum** (regardless of file count):
+- Feature spans frontend + backend (coordination complexity)
+- Changes needed in separate repositories or `--add-dir` directories
+- Shared API contracts or generated types between layers
+- Different tech stacks involved (e.g., Angular + .NET)
+
 ### Cross-Cutting Concern Multipliers
 
 These factors push scope UP by one level:

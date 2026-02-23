@@ -77,7 +77,7 @@
     },
     {
       "name": "feature-sprint",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "description": "Scope-driven feature development. Subagents for tiny/small/medium (fast). Agent Teams for large (analysts collaborate, implementers self-coordinate, reviewer auto-starts).",
       "source": "./plugins/feature-sprint",
       "author": {

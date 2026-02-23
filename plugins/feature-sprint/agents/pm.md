@@ -78,23 +78,46 @@ Look for complexity signals in the feature text:
 3. **Read** 1-2 key files to understand current structure
 4. **Count** affected files and modules
 
-### Step 3: Assess Cross-Cutting Concerns
+### Step 3: Detect Cross-Layer / Cross-Repo Scope
+
+Check if the feature spans multiple layers or repositories:
+
+**Cross-layer signals** (pushes scope toward LARGE):
+- Feature mentions both "frontend" and "backend" (or "API" and "UI")
+- Requires changes in both client-side components and server-side endpoints
+- Needs shared types/interfaces/contracts between layers
+- Involves database schema changes that affect API responses consumed by UI
+
+**Cross-repo signals** (pushes scope toward LARGE or HUGE):
+- Current session has access to multiple project directories (e.g., via `--add-dir`)
+- Feature requires coordinated changes across separate repositories
+- Different tech stacks involved (e.g., Angular frontend + .NET backend)
+- Shared API contracts or generated types between repos
+
+**If cross-layer/cross-repo detected:**
+- Minimum scope is **large** (even if file count is low — coordination complexity matters)
+- List affected repos/layers explicitly in the Scope Brief
+- Note interface contracts needed between layers
+- Flag that implementers will need separate file ownership per layer
+
+### Step 4: Assess Other Cross-Cutting Concerns
 
 Check if the feature touches:
-- Multiple architectural layers (UI + API + DB)
 - Shared components or services used by many consumers
 - Configuration files or build setup
 - Multiple bounded contexts or modules
+- Authentication or authorization flow
 
-### Step 4: Determine Scope Level
+### Step 5: Determine Scope Level
 
 Apply these rules in order:
 
 1. **If only 1 file needs a trivial text/value change** → `tiny`
 2. **If 1 file needs simple logic (add function, handler, element)** → `small`
 3. **If 2-3 files in the same module need coordinated changes** → `medium`
-4. **If 4+ files across different modules/layers** → `large`
-5. **If it affects fundamental architecture, >8 files, or requires migration** → `huge`
+4. **If cross-layer or cross-repo work detected (Step 3)** → `large` minimum
+5. **If 4+ files across different modules/layers** → `large`
+6. **If it affects fundamental architecture, >8 files, or requires migration** → `huge`
 
 ## Your Output: Scope Brief
 
@@ -107,6 +130,11 @@ Return this structured format:
 - **Scope**: [tiny | small | medium | large | huge]
 - **Confidence**: [high | medium | low]
 - **Rationale**: [1-2 sentences explaining why this scope level]
+
+### Affected Layers
+- **Layers**: [frontend | backend | both | single-layer]
+- **Repos/Dirs**: [list directories if cross-repo, or "single repo"]
+- **Interface contracts**: [list any API contracts, shared types, or schemas needed between layers]
 
 ### Affected Files
 - `path/to/file1` - [create | modify] - [what changes]

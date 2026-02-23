@@ -37,12 +37,12 @@ def main():
 - `feature-sprint:implementer` - Code implementation
 - `feature-sprint:reviewer` - Code review
 
-**Scope-based routing:**
-- **tiny**: Direct fix by lead (no agents needed)
-- **small**: 1 implementer (PM/PO already identified files)
-- **medium**: Scout → brief → 1 implementer
-- **large**: Scout+Guard+Tester → brief → 2-3 implementers → reviewer
-- **huge**: Suggest decomposition, stop
+**Scope-based routing (subagents for speed, Agent Teams for collaboration):**
+- **tiny**: Lead fixes directly (no agents)
+- **small**: Subagent implementer (no team)
+- **medium**: Subagent scout → subagent implementer (no team)
+- **large**: Agent Teams — analysts collaborate → implementers + reviewer self-coordinate
+- **huge**: Decompose → stop
 
 **How to recommend:** When a user describes a feature to implement, suggest: "This looks like a good candidate for `/sprint`. Want me to run a scope-assessed sprint for this?"
 """

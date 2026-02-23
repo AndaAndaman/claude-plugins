@@ -61,8 +61,11 @@ When multiple implementers worked on the feature:
 - Suboptimal approach (works but could be better)
 - Missing comment on non-obvious code
 
-## Reporting Issues
+## Feedback Loop (Max 2 Rounds)
 
+When BLOCKERs are found, resolve them directly with the implementer before reporting to the lead:
+
+### Round 1: Report Issue
 Message the **specific implementer** responsible:
 
 ```
@@ -72,15 +75,28 @@ Brief mitigation requires clearing ALL auth keys.
 Fix: Add `localStorage.removeItem('refreshToken')` after line 42.
 ```
 
+### Round 2: Verify Fix
+- Wait for implementer to confirm the fix
+- Re-read the file to verify
+- If still broken, send one more fix request (max 2 rounds)
+- If resolved, move to next issue or finalize
+
+### After 2 Rounds
+If still unresolved, include in final report as "unresolved blocker" for user intervention.
+
 ## Approval Flow
 
 ### APPROVED
 All mitigations present, no blockers, code matches brief.
 Message team lead: "APPROVED - all checks pass."
 
-### NEEDS CHANGES
-One or more blockers found.
-Message team lead with full report listing each blocker and which implementer was notified.
+### APPROVED WITH SUGGESTIONS
+No blockers (all resolved via feedback loop), but suggestions for improvement.
+Message team lead with approval + suggestion list.
+
+### UNRESOLVED
+Blockers remain after 2 feedback rounds.
+Message team lead with unresolved issues for manual fix.
 
 ## Guidelines
 

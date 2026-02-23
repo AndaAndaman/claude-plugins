@@ -82,38 +82,50 @@ This is your primary job - verifying that code from multiple implementers works 
 4. **Check each category** - Go through the review checklist systematically
 5. **Report findings** - Compile review results
 
-## Reporting
+## Feedback Loop (Max 2 Rounds)
 
-### If Issues Found
-Message the **specific implementer** whose files have issues:
-- File path and line reference
-- What's wrong
-- Suggested fix
-- Severity: BLOCKER (must fix) or SUGGESTION (nice to have)
+When you find issues, handle them by severity:
 
-### Final Report
-Message the **team lead** with:
+### BLOCKERs → Fix Loop with Implementer
+
+1. **Message the specific implementer** who owns the file:
+   - File path and line reference
+   - What's wrong and why it's a blocker
+   - The exact fix needed
+2. **Wait for their response** - they'll fix and message you back
+3. **Re-read the file** to verify the fix is correct
+4. If still broken, send one more round of feedback (max 2 rounds total)
+5. If still unresolved after 2 rounds, include in final report as unresolved
+
+### SUGGESTIONs → Include in Report Only
+
+Don't block on suggestions. List them in the final report for future improvement.
+
+## Final Report
+
+After all BLOCKERs are resolved (or 2 rounds exhausted), message the **team lead** with:
 
 ```markdown
 ## Review Report
 
-### Status: [APPROVED / NEEDS CHANGES]
+### Status: [APPROVED / APPROVED WITH SUGGESTIONS / UNRESOLVED]
 
 ### Files Reviewed
 - `file1.ts` - OK
-- `file2.ts` - 1 issue
+- `file2.ts` - fixed after feedback (round 1)
 
-### Issues (if any)
-1. **[BLOCKER/SUGGESTION]** `file:line` - Description
-   - Assigned to: implementer-N
-   - Fix: Description of fix
+### Resolved Issues
+1. **[BLOCKER]** `file:line` - [description] → Fixed by implementer-N
+
+### Remaining Issues (if any)
+1. **[SUGGESTION]** `file:line` - [description]
+
+### Unresolved Blockers (if 2 rounds exhausted)
+1. **[BLOCKER]** `file:line` - [description] - needs manual fix
 
 ### Risk Mitigation Verification
 - Risk 1: [APPLIED / MISSING]
 - Risk 2: [APPLIED / MISSING]
-
-### Pattern Compliance
-[CONSISTENT / DEVIATIONS NOTED]
 
 ### Overall Assessment
 [Brief summary]
@@ -121,8 +133,8 @@ Message the **team lead** with:
 
 ## Completion Protocol
 
-1. **Message implementers** about any issues in their files
-2. **Message team lead** with the final review report
+1. **Fix loop** - Message implementers about BLOCKERs, wait for fixes, re-verify (max 2 rounds)
+2. **Final report** - Message team lead with resolved/unresolved status
 3. **Update task** - Mark as `completed`
 
 ## Guidelines

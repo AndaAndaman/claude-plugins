@@ -92,12 +92,24 @@ When finished:
    - Risk mitigations applied
    - Any interface contracts agreed with other implementers
    - Any concerns or open questions
+3. **Stay alive for reviewer feedback** - Do NOT shut down after completing. The reviewer may message you with fix requests.
+
+## Reviewer Feedback Loop
+
+After you complete your task, the reviewer will check your code. If they find issues:
+
+1. **Reviewer messages you** with specific BLOCKER issues and fixes needed
+2. **Apply the fix** - Read the file, make the change
+3. **Message reviewer back** confirming: "Fixed [issue] in `[file]`"
+4. This may happen up to 2 rounds
+
+Keep fixes focused on what the reviewer asked for. Don't refactor or add improvements beyond the fix.
 
 ## Communication Guidelines
 
 - **To other implementers**: Interface contracts, dependency questions
+- **To reviewer**: Fix confirmations, clarification on requested changes
 - **To team lead**: Completion status, blockers, concerns
-- **To analysts (scout/guard/tester)**: Clarification questions about the brief (only if they're still active)
 - Keep messages concise and actionable
 - Always include the relevant file path when discussing code
 

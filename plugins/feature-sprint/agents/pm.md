@@ -53,10 +53,10 @@ When working as a teammate in a sprint team:
 
 | Level | Files Affected | Description | Sprint Workflow |
 |-------|---------------|-------------|-----------------|
-| **tiny** | 1 file, trivial change | Typo, rename, one-line fix | Lead does it directly |
-| **small** | 1 file, simple logic | Add tooltip, tweak styling, add simple handler | Scout + 1 implementer |
-| **medium** | 2-3 files, focused | Add feature with component + service changes | Scout + Guard + Tester + 1 implementer |
-| **large** | 4+ files, cross-module | Multi-layer feature with API + UI + tests | Full team (analysts + 2-3 implementers + reviewer) |
+| **tiny** | 1 file, trivial change | Typo, rename, one-line fix | Lead fixes directly |
+| **small** | 1 file, simple logic | Add tooltip, tweak styling, add simple handler | Subagent implementer |
+| **medium** | 2-3 files, focused | Add feature with component + service changes | Subagent scout + implementer |
+| **large** | 4+ files, cross-module | Multi-layer feature with API + UI + tests | Agent Teams (analysts + implementers + reviewer) |
 | **huge** | System-wide, architectural | Migration, framework swap, cross-cutting refactor | STOP - suggest decomposition |
 
 ## Assessment Methodology

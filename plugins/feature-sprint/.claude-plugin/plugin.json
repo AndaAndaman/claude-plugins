@@ -1,7 +1,7 @@
 {
   "name": "feature-sprint",
-  "version": "0.4.3",
-  "description": "Full-lifecycle feature development using Agent Teams. PM/PO sizes scope first, then routes to the right-sized workflow: tiny (direct fix) through large (full team with parallel implementers and review).",
+  "version": "0.5.0",
+  "description": "Scope-driven feature development. Subagents for tiny/small/medium (fast, no overhead). Agent Teams for large (analysts collaborate, implementers self-coordinate, reviewer auto-starts).",
   "author": {
     "name": "FlowAccount Developer",
     "email": "dev@flowaccount.com"

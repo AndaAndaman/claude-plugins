@@ -155,6 +155,7 @@ For each instinct file, parse the YAML frontmatter to extract:
 
 **Separate by source:**
 - **Personal** (`source: "session-observation"` or no source field) — will be updated
+- **Conversation** (`source: "conversation-knowledge"`) — will be updated (from `/extract-knowledge`)
 - **Inherited** (`source: "inherited"`) — read-only, never modified
 - **Imported** (`source: "imported"`) — can be updated but flagged separately
 
@@ -193,6 +194,28 @@ Look for these pattern types in the observations:
 **Naming conventions** (from `patterns.naming` field):
 - Consistent case styles across file operations
 - Example: All files use kebab-case → "prefer-kebab-case-naming"
+
+**Conversation knowledge** (from `tool: "ConversationKnowledge"`):
+- These observations come from `/extract-knowledge` — user-confirmed business knowledge extracted from conversation
+- Each observation is already a pre-validated instinct candidate (user explicitly confirmed it)
+- Group by `input_summary.domain` (e.g., "thai-tax", "invoice-validation", "authentication")
+- Use `input_summary.summary` as the instinct trigger
+- Use `output_summary.detail` as the instinct action
+- Use `patterns.knowledge_extraction.confidence_hint` to set initial confidence:
+  - `high` → 0.5 (user explicitly confirmed knowledge)
+  - `medium` → 0.4 (discussed but not fully verified)
+  - `low` → 0.3 (mentioned in passing, same as default)
+- Use `patterns.knowledge_extraction.category` as additional domain context
+- **Matching:** If an existing instinct shares the same domain AND has overlapping trigger keywords, strengthen it instead of creating a duplicate
+- **Instinct format:**
+  ```yaml
+  id: wht-vendor-residency-rule
+  trigger: "when calculating withholding tax deductions"
+  action: "Apply different WHT rates based on vendor residency: 3% for resident service providers, 15% for non-resident"
+  domain: thai-tax
+  source: "conversation-knowledge"
+  ```
+- **Note:** Unlike tool-use patterns that need repeated observations, a single `ConversationKnowledge` entry with `confidence_hint: high` is sufficient to create an instinct — the user already validated it during `/extract-knowledge`
 
 ### Step 3b: Analyze Structural Patterns
 
@@ -451,6 +474,10 @@ Auto-approved instincts represent strong, validated patterns that should be trea
   - service-imports-injectable (import-pattern) at {initialConfidence}
   - component-onpush-detection (decorator-usage) at {initialConfidence}
 
+**Conversation knowledge instincts:** {count}
+  - wht-vendor-residency-rule (thai-tax) at 0.5
+  - tax-id-format-validation (invoice-validation) at 0.5
+
 **Auto-approved:** {count}
   - always-run-tests (0.8) — now active
 
@@ -508,6 +535,23 @@ Use these standard domain tags:
 - `signature-convention` — Function parameter/return type patterns (structural)
 - `decorator-usage` — Framework decorator preferences (structural)
 - `structural-correction` — Structural elements consistently corrected after generation (structural)
+
+**Conversation knowledge domains** (from `/extract-knowledge`):
+- `business-rule` — Domain-specific business logic, validation rules, calculation formulas
+- `domain-term` — Domain terminology with definitions and usage context
+- `architecture-decision` — Architectural choices, pattern rationale, module boundaries
+- `debugging-insight` — Root causes, non-obvious failure modes, workarounds
+- `integration-knowledge` — API contracts, data formats, service dependencies
+- `process-knowledge` — Deployment steps, testing strategies, review criteria
+
+**Custom domains:** `/extract-knowledge` may produce domain tags not in this list (e.g., `thai-tax`, `invoice-validation`). Accept any domain tag — the list above is guidance, not a constraint. Custom domains cluster naturally via `/evolve`.
+
+## Instinct Sources
+
+- `session-observation` — Learned from tool-use patterns during sessions (default)
+- `conversation-knowledge` — Extracted from conversation via `/extract-knowledge`
+- `inherited` — Team/project baselines (read-only, never modified)
+- `imported` — Cross-project imports via `/instinct-import` (editable)
 
 ## Error Handling
 

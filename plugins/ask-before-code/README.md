@@ -6,14 +6,14 @@ A Claude Code plugin that enforces requirement clarity before writing code, prev
 
 ## Overview
 
-**Ask Before Code** helps developers avoid the costly mistake of coding with incomplete or vague requirements. It proactively detects unclear requests, asks targeted clarification questions, and prevents writing code until requirements are sufficiently clear.
+**Ask Before Code** helps developers avoid the costly mistake of coding with incomplete or vague requirements. It proactively detects unclear requests and asks targeted clarification questions to ensure requirements are sufficiently clear before coding begins.
 
 ## Philosophy
 
 The best time to clarify requirements is **before** you write the code, not after. This plugin embeds that wisdom directly into your workflow:
 
 - ✅ **Proactive** - Catches vague requests automatically
-- ✅ **Preventive** - Blocks code-writing until requirements are clear
+- ✅ **Preventive** - Encourages clarity before code-writing begins
 - ✅ **Practical** - Uses smart AI judgment, not rigid rules
 - ✅ **Productive** - Saves hours of rework
 
@@ -50,26 +50,6 @@ On-demand requirement clarification with optional topic:
 - Interactive Q&A using multiple choice options
 - Generates actionable plan when complete
 - Can be invoked manually anytime
-
-### 🔒 Smart Hook Protection
-
-Prevents writing code without clear requirements:
-
-```
-You: [tries to write code]
-Hook: "⚠️ Requirements unclear. Missing:
-       - Domain/feature context
-       - User requirements
-       - Success criteria
-
-       Run /clarify to gather requirements first."
-```
-
-**Smart behavior:**
-- AI analyzes conversation for clarity
-- Auto-triggers clarification if unclear
-- Allows override if user confirms understanding
-- Skips obvious cases (docs, tests, trivial fixes)
 
 ### 📚 Request Clarification Skill
 
@@ -110,8 +90,8 @@ Just work normally! The plugin activates automatically:
 1. **You get a vague task**: "Fix the invoice thing"
 2. **Clarity Guardian detects vagueness**: Triggers clarification
 3. **Interactive Q&A**: Answer targeted questions
-4. **Requirements validated**: Hook checks clarity before allowing code
-5. **Write code confidently**: With complete requirements ✅
+4. **Requirements confirmed**: Clear acceptance criteria established
+5. **Write code confidently**: With complete requirements
 
 ### Manual Mode
 
@@ -125,15 +105,6 @@ Use `/clarify` command when you need explicit requirement gathering:
 /clarify payment integration
 /clarify performance issue
 /clarify new dashboard feature
-```
-
-### Override Mode
-
-If you're confident requirements are clear, you can override:
-
-```
-Hook: "Requirements unclear. Proceed anyway?"
-You: "Yes, requirements are clear" → Hook allows
 ```
 
 ## How It Works
@@ -156,15 +127,7 @@ You: "Yes, requirements are clear" → Hook allows
 
 Uses `AskUserQuestion` for efficient multiple-choice Q&A.
 
-### 3. Validation Phase
-
-**Smart Hook** validates requirements before code-writing:
-- Analyzes conversation history
-- Checks for complete context
-- Ensures clarity threshold met
-- Allows proceed or triggers more questions
-
-### 4. Coding Phase
+### 3. Coding Phase
 
 Once requirements are clear:
 - Write code with confidence
@@ -252,36 +215,6 @@ Guardian: "Critical bug confirmed! ✅
           I'll investigate the login service immediately."
 ```
 
-### Example 3: Hook Prevention
-
-```
-User: "Add sorting to the table"
-
-[You try to write code]
-
-Hook: "⚠️ Requirements unclear. Questions:
-
-      - Which table? (orders, products, users)
-      - Sort by what columns?
-      - Client-side or server-side sorting?
-      - Default sort order?
-
-      Use /clarify to gather requirements."
-
-User: [runs /clarify]
-
-[After Q&A]
-
-Hook: "✅ Requirements clear. Proceeding:
-
-      - Table: Orders table
-      - Columns: Date, Amount, Status
-      - Server-side sorting
-      - Default: Date descending
-
-      You can now write code!"
-```
-
 ## Benefits
 
 ### For Developers
@@ -309,7 +242,7 @@ Hook: "✅ Requirements clear. Proceeding:
 - **Skill**: `request-clarification` - Core clarification methodology
 - **Agent**: `clarity-guardian` - Proactive vagueness detection
 - **Command**: `/clarify` - On-demand requirement gathering
-- **Hook**: PreToolUse (Write/Edit) - Prevents premature coding
+- **Hook**: SessionStart - Loads clarity-guardian context at session start
 
 ## Contributing
 

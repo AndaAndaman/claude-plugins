@@ -66,6 +66,11 @@ Requirements are clear when:
 - Success criteria are measurable
 - Confidence level is 80%+
 
+## References
+
+- `references/question-templates.md` — Ready-made question sets for features, bugs, refactors, APIs, and multi-part requests. Pick 2-3 relevant questions per scenario.
+- `references/checklists.md` — Completeness scoring checklists by request type. Use to decide whether to trigger clarification (< 60%), ask (60-79%), or proceed (>= 80%).
+
 ## Example
 
 **Vague Request**: "Add a report feature"

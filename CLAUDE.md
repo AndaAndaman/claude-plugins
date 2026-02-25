@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a Claude Code plugin marketplace repository containing productivity plugins for FlowAccount developers. The repository hosts three production plugins that enhance the Claude Code development workflow:
 
-1. **ask-before-code** (v0.4.0) - Prevents wasted development by encouraging requirement clarity
+1. **ask-before-code** (v0.4.1) - Prevents wasted development by encouraging requirement clarity
 2. **quick-wins** (v0.3.4) - Maintains code quality through systematic easy improvements
 3. **md-to-skill** (v0.8.2) - Converts markdown files into organized Claude skills
 

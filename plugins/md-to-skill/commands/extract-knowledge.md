@@ -134,7 +134,28 @@ observations_path = <cwd>/.claude/md-to-skill-observations.jsonl
 
 Ensure the `.claude/` directory exists before writing. Append each observation as a single JSON line.
 
-**JSON formatting:** Use `json.dumps(observation, ensure_ascii=False)` style — with spaces after colons and commas (e.g., `{"key": "value"}` not `{"key":"value"}`). This matches the format used by the Python hook scripts. Write via Bash with a Python one-liner or use the Write tool to append.
+**Formatting rules (must match Python hook output):**
+- **JSON:** Use spaces after colons and commas (e.g., `{"key": "value"}` not `{"key":"value"}`)
+- **Timestamp:** Use Python `datetime.now().isoformat()` format — local time with microseconds, no timezone suffix. Example: `"2026-02-26T15:14:22.651059"`, NOT `"2026-02-26T10:01:06Z"`
+- Write via Bash with a Python one-liner to ensure both rules are met:
+  ```bash
+  python3 -c "
+  import json, os
+  from datetime import datetime
+  obs = {
+    'timestamp': datetime.now().isoformat(),
+    'tool': 'ConversationKnowledge',
+    'input_summary': {'domain': '...', 'category': '...', 'summary': '...'},
+    'output_summary': {'success': True, 'detail': '...'},
+    'session_id': '...',
+    'patterns': {'knowledge_extraction': {'category': '...', 'confidence_hint': 'high', 'source': 'conversation'}}
+  }
+  path = os.path.join('<cwd>', '.claude', 'md-to-skill-observations.jsonl')
+  os.makedirs(os.path.dirname(path), exist_ok=True)
+  with open(path, 'a') as f:
+    f.write(json.dumps(obs) + '\n')
+  "
+  ```
 
 ### Step 5: Summary
 

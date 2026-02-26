@@ -134,6 +134,8 @@ observations_path = <cwd>/.claude/md-to-skill-observations.jsonl
 
 Ensure the `.claude/` directory exists before writing. Append each observation as a single JSON line.
 
+**JSON formatting:** Use `json.dumps(observation, ensure_ascii=False)` style — with spaces after colons and commas (e.g., `{"key": "value"}` not `{"key":"value"}`). This matches the format used by the Python hook scripts. Write via Bash with a Python one-liner or use the Write tool to append.
+
 ### Step 5: Summary
 
 After writing, show:

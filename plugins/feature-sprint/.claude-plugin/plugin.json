@@ -1,6 +1,6 @@
 {
   "name": "feature-sprint",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Scope-driven feature development. /sprint for one-shot features (subagents or Agent Teams by scope). /sprint-loop for long-lived sessions where agents accumulate context across iterations.",
   "author": {
     "name": "FlowAccount Developer",

@@ -84,16 +84,6 @@
         "name": "FlowAccount Developer",
         "email": "dev@flowaccount.com"
       }
-    },
-    {
-      "name": "dev-tools",
-      "version": "0.2.0",
-      "description": "Developer workflow tools providing MCP-based GitHub utilities such as PR creation.",
-      "source": "./plugins/dev-tools",
-      "author": {
-        "name": "FlowAccount Developer",
-        "email": "dev@flowaccount.com"
-      }
     }
   ]
 }

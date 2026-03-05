@@ -1,7 +1,0 @@
-{
-  "dev-tools": {
-    "type": "stdio",
-    "command": "node",
-    "args": ["${CLAUDE_PLUGIN_ROOT}/dist/server.js"]
-  }
-}

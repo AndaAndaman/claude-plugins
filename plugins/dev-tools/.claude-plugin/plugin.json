@@ -1,7 +1,14 @@
 {
   "name": "dev-tools",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "AWS dev tools exposed as MCP tools — ECS scaling and service management",
+  "mcpServers": {
+    "dev-tools": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/devtool.server.js"]
+    }
+  },
   "author": {
     "name": "Andaman N.",
     "email": "andaman_n@flowaccount.com"

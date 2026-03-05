@@ -27590,7 +27590,7 @@ function registerTools(server2) {
 
 // src/main.ts
 var server = new McpServer(
-  { name: "dev-tools", version: "0.1.0" },
+  { name: "dev-tools", version: "0.3.0" },
   { capabilities: { tools: {} } }
 );
 registerTools(server);

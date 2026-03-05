@@ -87,7 +87,7 @@
     },
     {
       "name": "dev-tools",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "description": "AWS dev tools exposed as MCP tools — ECS scaling and service management.",
       "source": "./plugins/dev-tools",
       "author": {

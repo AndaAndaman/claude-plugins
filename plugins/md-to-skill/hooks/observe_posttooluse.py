@@ -21,6 +21,7 @@ from datetime import datetime
 from hook_utils import (
     setup_plugin_path,
     load_hook_input,
+    find_git_root,
     is_secret_file,
     get_observations_path,
     get_session_cache_path,
@@ -351,6 +352,7 @@ def main():
         input_data = load_hook_input()
 
         cwd = input_data.get('cwd', '.')
+        cwd = find_git_root(cwd) or cwd
         session_id = input_data.get('session_id', '')
 
         # Load config (centralized or fallback)

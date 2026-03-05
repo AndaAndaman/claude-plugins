@@ -87,8 +87,8 @@
     },
     {
       "name": "dev-tools",
-      "version": "0.3.0",
-      "description": "AWS dev tools exposed as MCP tools — ECS scaling and service management.",
+      "version": "0.4.0",
+      "description": "AWS dev tools exposed as MCP tools — ECS management and SSO credential refresh.",
       "source": "./plugins/dev-tools",
       "author": {
         "name": "Andaman N.",

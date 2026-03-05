@@ -15,6 +15,24 @@ import re
 import fnmatch
 
 
+def find_git_root(start: str) -> str | None:
+    """Walk up from start to find the nearest .git directory (repo root)."""
+    current = os.path.abspath(start)
+    while True:
+        if os.path.isdir(os.path.join(current, '.git')):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+
+
+def resolve_cwd(input_data: dict) -> str:
+    """Get cwd from hook input, resolved to the git repo root."""
+    cwd = input_data.get('cwd', '.')
+    return find_git_root(cwd) or cwd
+
+
 def setup_plugin_path():
     """Add plugin root to sys.path for config imports.
 

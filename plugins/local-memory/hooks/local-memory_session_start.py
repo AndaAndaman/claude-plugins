@@ -13,7 +13,7 @@ from pathlib import Path
 
 # Add shared module to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
-from settings import load_settings
+from settings import load_settings, find_git_root
 
 
 def main():
@@ -23,6 +23,7 @@ def main():
         input_data = json.load(sys.stdin)
 
         cwd = input_data.get('cwd', '.')
+        cwd = find_git_root(cwd) or cwd
         source = input_data.get('source', 'startup')
 
         # Load settings

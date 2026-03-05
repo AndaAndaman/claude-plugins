@@ -13,6 +13,18 @@ import contextlib
 from pathlib import Path
 
 
+def find_git_root(start: str) -> str | None:
+    """Walk up from start to find the nearest .git directory (repo root)."""
+    current = os.path.abspath(start)
+    while True:
+        if os.path.isdir(os.path.join(current, '.git')):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+
+
 # Default settings
 DEFAULT_THRESHOLD = 2
 DEFAULT_AUTO_GENERATE = True

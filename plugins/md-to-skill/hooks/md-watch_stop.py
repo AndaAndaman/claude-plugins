@@ -43,7 +43,7 @@ except ImportError:
 
 # Try to import hook_utils (created by implementer-1)
 try:
-    from hooks.hook_utils import parse_frontmatter as _hu_parse_frontmatter
+    from hooks.hook_utils import parse_frontmatter as _hu_parse_frontmatter, find_git_root
     HOOK_UTILS_AVAILABLE = True
 except ImportError:
     HOOK_UTILS_AVAILABLE = False
@@ -497,6 +497,19 @@ def cleanup_stale_files(cwd: str, max_age_hours: int = 48):
         pass
 
 
+if not HOOK_UTILS_AVAILABLE:
+    def find_git_root(start: str) -> str | None:
+        """Fallback: walk up from start to find the nearest .git directory."""
+        current = os.path.abspath(start)
+        while True:
+            if os.path.isdir(os.path.join(current, '.git')):
+                return current
+            parent = os.path.dirname(current)
+            if parent == current:
+                return None
+            current = parent
+
+
 def main():
     """Main entry point for the stop hook."""
     try:
@@ -507,6 +520,8 @@ def main():
             sys.exit(0)
 
         cwd = input_data.get('cwd', '.')
+        # Resolve to git repo root to avoid using a subdirectory as project root
+        cwd = find_git_root(cwd) or cwd
         transcript_path = input_data.get('transcript_path', '')
 
         if not transcript_path:

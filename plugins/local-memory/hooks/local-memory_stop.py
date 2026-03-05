@@ -37,7 +37,7 @@ from datetime import datetime
 
 # Add shared module to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'shared'))
-from settings import DEFAULT_EXCLUDED_DIRS, load_settings as _shared_load_settings, file_lock
+from settings import DEFAULT_EXCLUDED_DIRS, load_settings as _shared_load_settings, file_lock, find_git_root
 
 
 # Global debug state
@@ -579,6 +579,8 @@ def main():
             sys.exit(0)
 
         cwd = input_data.get('cwd', '.')
+        # Resolve to git repo root to avoid using a subdirectory as project root
+        cwd = find_git_root(cwd) or cwd
         transcript_path = input_data.get('transcript_path', '')
 
         if not transcript_path:

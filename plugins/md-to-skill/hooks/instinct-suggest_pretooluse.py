@@ -17,7 +17,7 @@ from datetime import datetime
 
 # Try to import shared utilities from hook_utils (created by Package 1)
 try:
-    from hook_utils import parse_frontmatter, setup_plugin_path, load_hook_input
+    from hook_utils import parse_frontmatter, setup_plugin_path, load_hook_input, find_git_root
     HOOK_UTILS_AVAILABLE = True
 except ImportError:
     HOOK_UTILS_AVAILABLE = False
@@ -375,6 +375,7 @@ def main():
             input_data = json.load(sys.stdin)
 
         cwd = input_data.get('cwd', '.')
+        cwd = find_git_root(cwd) or cwd if HOOK_UTILS_AVAILABLE else cwd
         tool_name = input_data.get('tool_name', '')
         tool_input = input_data.get('tool_input', {})
 

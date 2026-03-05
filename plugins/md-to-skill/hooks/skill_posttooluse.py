@@ -427,6 +427,9 @@ def main():
     try:
         input_data = json.load(sys.stdin)
         cwd = input_data.get('cwd', '.')
+        # Resolve to git repo root
+        from hook_utils import find_git_root
+        cwd = find_git_root(cwd) or cwd
 
         # Load config once for all handlers
         config = {}

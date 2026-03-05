@@ -1,0 +1,17 @@
+{
+  "description": "Load dev-tools MCP tool instructions at session start",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/dev-tools_session-start.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

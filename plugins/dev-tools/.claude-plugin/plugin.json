@@ -1,7 +1,7 @@
 {
   "name": "dev-tools",
-  "version": "0.3.0",
-  "description": "AWS dev tools exposed as MCP tools — ECS scaling and service management",
+  "version": "0.4.0",
+  "description": "AWS dev tools exposed as MCP tools — ECS management and SSO credential refresh",
   "mcpServers": {
     "dev-tools": {
       "type": "stdio",
@@ -15,5 +15,5 @@
   },
   "homepage": "https://github.com/AndaAndaman/claude-plugins",
   "license": "MIT",
-  "keywords": ["aws", "ecs", "mcp", "dev-tools", "scaling"]
+  "keywords": ["aws", "ecs", "sso", "mcp", "dev-tools", "scaling"]
 }

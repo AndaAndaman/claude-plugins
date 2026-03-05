@@ -84,6 +84,16 @@
         "name": "FlowAccount Developer",
         "email": "dev@flowaccount.com"
       }
+    },
+    {
+      "name": "dev-tools",
+      "version": "0.2.0",
+      "description": "AWS dev tools exposed as MCP tools — ECS scaling and service management.",
+      "source": "./plugins/dev-tools",
+      "author": {
+        "name": "Andaman N.",
+        "email": "andaman_n@flowaccount.com"
+      }
     }
   ]
 }

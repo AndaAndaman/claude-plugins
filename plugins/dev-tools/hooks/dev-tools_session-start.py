@@ -26,11 +26,17 @@ Available MCP tools for AWS operations:
 - `aws_sso_status` - Check SSO token expiry (no API call, reads local cache)
 - `aws_sso_refresh` - Refresh SSO credentials (login if expired, exports to credential profile)
 
-**Typical workflow:**
-1. `aws_sso_status` to check if SSO session is valid
-2. If expired, `aws_sso_refresh` to login and export credentials
-3. `aws_ecs_list` to see running services
-4. `aws_ecs_update_service` or `aws_ecs_scale` to manage services
+**Jenkins CI:**
+- `jenkins_configure` - Set Jenkins URL, user, token, environment (staging/preprod)
+- `jenkins_list_targets` - Show available build targets with default parameters
+- `jenkins_build` - Trigger a build (ui, api, api-report, api-doc, api-profile, open-api, lambda-pdf-preview, lambda-pdf-gen)
+- `jenkins_status` - Check build status + console output
+
+**Typical workflows:**
+
+*AWS:* `aws_sso_status` -> `aws_sso_refresh` (if expired) -> `aws_ecs_list` -> `aws_ecs_update_service`
+
+*Jenkins:* `jenkins_configure` (set token once) -> `jenkins_list_targets` -> `jenkins_build` (target + params) -> `jenkins_status` (monitor)
 """
 
     output = {

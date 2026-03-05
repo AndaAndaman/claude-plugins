@@ -4522,6 +4522,502 @@ Try: aws sso login --profile ${SSO_PROFILE}`);
   );
 }
 
+// src/shared/jenkins.ts
+var import_node_fs3 = require("node:fs");
+var import_node_path3 = require("node:path");
+var import_node_os3 = require("node:os");
+var import_node_child_process2 = require("node:child_process");
+var STAGING_JOBS = {
+  ui: "staging/job/workspace/job/frontend",
+  api: "staging/job/dotnet/job/dotnet.arm64",
+  lambda: "staging/job/workspace/job/serverless"
+};
+var PREPROD_JOBS = {
+  ui: "preprod/job/workspace/job/frontend",
+  api: "preprod/job/workspace/job/dotnet.arm64",
+  lambda: "preprod/job/workspace/job/lambda"
+};
+var CONFIG_DIR2 = (0, import_node_path3.join)((0, import_node_os3.homedir)(), ".config", "dev-tools");
+var JENKINS_CONFIG_FILE = (0, import_node_path3.join)(CONFIG_DIR2, "jenkins.json");
+var DEFAULTS2 = {
+  url: "http://jenkins-workspace.flowaccount.private",
+  user: "anda",
+  token: "",
+  environment: "staging",
+  jobPaths: STAGING_JOBS
+};
+var cached = null;
+function loadJenkinsConfig() {
+  if (cached)
+    return cached;
+  try {
+    const raw = (0, import_node_fs3.readFileSync)(JENKINS_CONFIG_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    cached = { ...DEFAULTS2, ...parsed };
+    if (cached.environment === "preprod") {
+      cached.jobPaths = { ...PREPROD_JOBS, ...parsed.jobPaths };
+    } else {
+      cached.jobPaths = { ...STAGING_JOBS, ...parsed.jobPaths };
+    }
+  } catch {
+    cached = { ...DEFAULTS2, jobPaths: { ...STAGING_JOBS } };
+  }
+  return cached;
+}
+function saveJenkinsConfig(config) {
+  const current2 = loadJenkinsConfig();
+  Object.assign(current2, config);
+  if (config.environment) {
+    current2.jobPaths = config.environment === "preprod" ? { ...PREPROD_JOBS } : { ...STAGING_JOBS };
+  }
+  cached = current2;
+  (0, import_node_fs3.mkdirSync)(CONFIG_DIR2, { recursive: true });
+  (0, import_node_fs3.writeFileSync)(JENKINS_CONFIG_FILE, JSON.stringify(current2, null, 2) + "\n", "utf8");
+}
+function getJenkinsConfigPath() {
+  return JENKINS_CONFIG_FILE;
+}
+var BUILD_TARGETS = {
+  ui: {
+    name: "ui",
+    description: "UI/Frontend service",
+    jobPathKey: "ui",
+    defaults: {
+      COMMIT_HASH: "a-staging",
+      SITE: "acc",
+      SERVICE_NAME: "ui",
+      FORCE_YARN: "false",
+      SOURCE_MAP_ENABLE: "false",
+      NX_RESET: "false"
+    }
+  },
+  api: {
+    name: "api",
+    description: "API Core service",
+    jobPathKey: "api",
+    defaults: {
+      COMMIT_HASH: "canary-staging",
+      BUILD_SITE: "acc",
+      SERVICE_NAME: "api-core",
+      BASE_DOCKER: "business-api",
+      NS: "",
+      STAGE: "sandbox",
+      PARAM_LOG_LEVEL: "none",
+      STOP_TASK_BEFORE_FORCE_NEW_DEPLOYMENT: "false"
+    }
+  },
+  "api-report": {
+    name: "api-report",
+    description: "Report API service",
+    jobPathKey: "api",
+    defaults: {
+      COMMIT_HASH: "canary-staging",
+      BUILD_SITE: "acc",
+      SERVICE_NAME: "report-api",
+      BASE_DOCKER: "report-api",
+      NS: "",
+      STAGE: "sandbox",
+      PARAM_LOG_LEVEL: "none",
+      STOP_TASK_BEFORE_FORCE_NEW_DEPLOYMENT: "false"
+    }
+  },
+  "api-doc": {
+    name: "api-doc",
+    description: "Document API service",
+    jobPathKey: "api",
+    defaults: {
+      COMMIT_HASH: "canary-staging",
+      BUILD_SITE: "acc",
+      SERVICE_NAME: "doc-api",
+      BASE_DOCKER: "doc-api",
+      NS: "",
+      STAGE: "sandbox",
+      PARAM_LOG_LEVEL: "none",
+      STOP_TASK_BEFORE_FORCE_NEW_DEPLOYMENT: "false"
+    }
+  },
+  "api-profile": {
+    name: "api-profile",
+    description: "Profile API service",
+    jobPathKey: "api",
+    defaults: {
+      COMMIT_HASH: "canary-staging",
+      BUILD_SITE: "acc",
+      SERVICE_NAME: "profile-api",
+      BASE_DOCKER: "profile-api",
+      NS: "",
+      STAGE: "sandbox",
+      PARAM_LOG_LEVEL: "none",
+      STOP_TASK_BEFORE_FORCE_NEW_DEPLOYMENT: "false"
+    }
+  },
+  "open-api": {
+    name: "open-api",
+    description: "Open API service",
+    jobPathKey: "api",
+    defaults: {
+      COMMIT_HASH: "canary-staging",
+      BUILD_SITE: "",
+      SERVICE_NAME: "open-api",
+      BASE_DOCKER: "open-api",
+      NS: "-ns",
+      STAGE: "sandbox-ns",
+      PARAM_LOG_LEVEL: "none",
+      STOP_TASK_BEFORE_FORCE_NEW_DEPLOYMENT: "false"
+    }
+  },
+  "lambda-pdf-preview": {
+    name: "lambda-pdf-preview",
+    description: "Lambda PDF Preview",
+    jobPathKey: "lambda",
+    jobPathOverride: "staging/job/workspace/job/lambda-pdf-preview-build",
+    defaults: {
+      BranchName: "main",
+      lambda: "lambda.pdf-preview",
+      configuration: "staging",
+      AliasesName: "staging-ac"
+    }
+  },
+  "lambda-pdf-gen": {
+    name: "lambda-pdf-gen",
+    description: "Lambda PDF Generator",
+    jobPathKey: "lambda",
+    defaults: {
+      BranchName: "a-staging",
+      lambda: "lambda.pdf-generator",
+      configuration: "staging",
+      YarnBool: "Yes"
+    }
+  }
+};
+function curlJson(url, config, method = "GET", data) {
+  const auth = `${config.user}:${config.token}`;
+  const args = ["-s", "-i", "-u", auth];
+  if (method === "POST")
+    args.push("-X", "POST");
+  if (data) {
+    for (const d of data) {
+      args.push("--data", d);
+    }
+  }
+  args.push(url);
+  try {
+    const raw = (0, import_node_child_process2.execSync)(`curl ${args.map((a) => `"${a}"`).join(" ")}`, {
+      encoding: "utf8",
+      maxBuffer: 5 * 1024 * 1024,
+      timeout: 3e4
+    });
+    const parts = raw.split(/\r?\n\r?\n/);
+    const headers = parts[0] || "";
+    const body = parts.slice(1).join("\n\n");
+    const statusMatch = headers.match(/HTTP\/[\d.]+ (\d+)/);
+    const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+    return { status, body, headers };
+  } catch (e) {
+    return { status: 0, body: e.message || "curl failed", headers: "" };
+  }
+}
+function getCrumb(config) {
+  const { body } = curlJson(`${config.url}/crumbIssuer/api/json`, config);
+  try {
+    const data = JSON.parse(body);
+    return data.crumb || null;
+  } catch {
+    return null;
+  }
+}
+function triggerBuild(target, params) {
+  const config = loadJenkinsConfig();
+  if (!config.token) {
+    return { success: false, error: "Jenkins token not configured. Run jenkins_configure first." };
+  }
+  const bt = BUILD_TARGETS[target];
+  if (!bt) {
+    return { success: false, error: `Unknown target: ${target}. Available: ${Object.keys(BUILD_TARGETS).join(", ")}` };
+  }
+  const merged = { ...bt.defaults, ...params };
+  const jobPath = bt.jobPathOverride || config.jobPaths[bt.jobPathKey];
+  const url = `${config.url}/job/${jobPath}/buildWithParameters`;
+  const data = Object.entries(merged).map(([k, v]) => `${k}=${v}`);
+  const crumb = getCrumb(config);
+  const args = ["-s", "-i", "-u", `${config.user}:${config.token}`];
+  if (crumb)
+    args.push("-H", `Jenkins-Crumb: ${crumb}`);
+  args.push("-X", "POST");
+  for (const d of data) {
+    args.push("--data", d);
+  }
+  args.push(url);
+  let raw;
+  try {
+    raw = (0, import_node_child_process2.execSync)(`curl ${args.map((a) => `"${a}"`).join(" ")}`, {
+      encoding: "utf8",
+      maxBuffer: 5 * 1024 * 1024,
+      timeout: 3e4
+    });
+  } catch (e) {
+    return { success: false, error: `curl failed: ${e.message}` };
+  }
+  const locMatch = raw.match(/Location:\s*(\S+)/i);
+  if (!locMatch) {
+    const statusMatch = raw.match(/HTTP\/[\d.]+ (\d+)/);
+    return { success: false, error: `Failed to trigger build (HTTP ${statusMatch?.[1] || "?"}). Check Jenkins URL/token.` };
+  }
+  return { success: true, queueUrl: locMatch[1].trim() };
+}
+function getQueueStatus(queueUrl) {
+  const config = loadJenkinsConfig();
+  const { body } = curlJson(`${queueUrl}api/json`, config);
+  try {
+    const data = JSON.parse(body);
+    const execUrl = data?.executable?.url;
+    if (execUrl) {
+      return { buildUrl: execUrl, waiting: false };
+    }
+    return { waiting: true, reason: data?.why || "Waiting in queue" };
+  } catch {
+    return { waiting: true, reason: "Cannot parse queue response" };
+  }
+}
+function getBuildStatus(buildUrl, consoleLines = 20) {
+  const config = loadJenkinsConfig();
+  const { body: buildBody } = curlJson(`${buildUrl}api/json`, config);
+  let building = true;
+  let result = null;
+  let number = null;
+  try {
+    const data = JSON.parse(buildBody);
+    building = data.building ?? true;
+    result = data.result ?? null;
+    number = data.number ?? null;
+  } catch {
+  }
+  let lines = [];
+  try {
+    const auth = `${config.user}:${config.token}`;
+    const raw = (0, import_node_child_process2.execSync)(`curl -s -u "${auth}" "${buildUrl}consoleText"`, {
+      encoding: "utf8",
+      maxBuffer: 5 * 1024 * 1024,
+      timeout: 15e3
+    });
+    const allLines = raw.split("\n");
+    lines = allLines.slice(-consoleLines);
+  } catch {
+  }
+  return { building, result, number, url: buildUrl, consoleLines: lines };
+}
+
+// src/tools/jenkins-configure.tool.ts
+function registerJenkinsConfigureTool(server2) {
+  defineTool(
+    server2,
+    "jenkins_configure",
+    "Configure Jenkins connection settings. Call without arguments to see current config. Settings persist to ~/.config/dev-tools/jenkins.json.",
+    {
+      url: external_exports.string().optional().describe("Jenkins base URL"),
+      user: external_exports.string().optional().describe("Jenkins API username"),
+      token: external_exports.string().optional().describe("Jenkins API token"),
+      environment: external_exports.enum(["staging", "preprod"]).optional().describe("Environment \u2014 switches job paths automatically")
+    },
+    async (input) => {
+      const before = loadJenkinsConfig();
+      let changed = false;
+      const updates = {};
+      if (input.environment !== void 0) {
+        updates.environment = input.environment;
+        changed = true;
+      }
+      if (input.url !== void 0) {
+        updates.url = input.url;
+        changed = true;
+      }
+      if (input.user !== void 0) {
+        updates.user = input.user;
+        changed = true;
+      }
+      if (input.token !== void 0) {
+        updates.token = input.token;
+        changed = true;
+      }
+      if (changed) {
+        saveJenkinsConfig(updates);
+      }
+      const after = loadJenkinsConfig();
+      const tokenDisplay = after.token ? after.token.slice(0, 6) + "..." : "<not set>";
+      if (!changed) {
+        return textResult([
+          `Jenkins configuration (${getJenkinsConfigPath()}):`,
+          `  url:         ${after.url}`,
+          `  user:        ${after.user}`,
+          `  token:       ${tokenDisplay}`,
+          `  environment: ${after.environment}`,
+          `  job paths:`,
+          `    ui:     ${after.jobPaths.ui}`,
+          `    api:    ${after.jobPaths.api}`,
+          `    lambda: ${after.jobPaths.lambda}`
+        ].join("\n"));
+      }
+      const lines = [`Jenkins configuration updated (${getJenkinsConfigPath()}):`];
+      if (input.url !== void 0)
+        lines.push(`  url: ${before.url} \u2192 ${after.url}`);
+      if (input.user !== void 0)
+        lines.push(`  user: ${before.user} \u2192 ${after.user}`);
+      if (input.token !== void 0)
+        lines.push(`  token: updated`);
+      if (input.environment !== void 0) {
+        lines.push(`  environment: ${before.environment} \u2192 ${after.environment}`);
+        lines.push(`  job paths updated for ${after.environment}`);
+      }
+      return textResult(lines.join("\n"));
+    }
+  );
+}
+
+// src/tools/jenkins-list.tool.ts
+function registerJenkinsListTool(server2) {
+  defineTool(
+    server2,
+    "jenkins_list_targets",
+    "List all available Jenkins build targets with their default parameters.",
+    {},
+    async () => {
+      const config = loadJenkinsConfig();
+      const lines = [
+        `Jenkins Build Targets (environment: ${config.environment})`,
+        "=".repeat(50)
+      ];
+      for (const [key, target] of Object.entries(BUILD_TARGETS)) {
+        const jobPath = target.jobPathOverride || config.jobPaths[target.jobPathKey];
+        lines.push("");
+        lines.push(`${key} \u2014 ${target.description}`);
+        lines.push(`  Job: ${jobPath}`);
+        lines.push("  Defaults:");
+        for (const [k, v] of Object.entries(target.defaults)) {
+          lines.push(`    ${k}: ${v || "<empty>"}`);
+        }
+      }
+      lines.push("");
+      lines.push('Usage: jenkins_build with target="<name>" and optional params to override defaults.');
+      return textResult(lines.join("\n"));
+    }
+  );
+}
+
+// src/tools/jenkins-build.tool.ts
+function registerJenkinsBuildTool(server2) {
+  defineTool(
+    server2,
+    "jenkins_build",
+    `Trigger a Jenkins build. Available targets: ${Object.keys(BUILD_TARGETS).join(", ")}. Pass params as JSON to override defaults. Returns queue URL. Use watch=true to wait for build to start and return build URL.`,
+    {
+      target: external_exports.string().describe(`Build target: ${Object.keys(BUILD_TARGETS).join(", ")}`),
+      params: external_exports.string().optional().describe('JSON object of parameter overrides, e.g. {"COMMIT_HASH":"main","SITE":"acc"}'),
+      watch: external_exports.boolean().optional().describe("Wait for build to start and return build URL (default: false)")
+    },
+    async (input) => {
+      const target = input.target;
+      if (!BUILD_TARGETS[target]) {
+        return errorResult(`Unknown target: ${target}
+Available: ${Object.keys(BUILD_TARGETS).join(", ")}`);
+      }
+      let params = {};
+      if (input.params) {
+        try {
+          params = JSON.parse(input.params);
+        } catch {
+          return errorResult('Invalid params JSON. Expected: {"KEY":"value", ...}');
+        }
+      }
+      const bt = BUILD_TARGETS[target];
+      const merged = { ...bt.defaults, ...params };
+      const lines = [
+        `Triggering ${bt.description}...`,
+        "Parameters:",
+        ...Object.entries(merged).map(([k, v]) => `  ${k}: ${v || "<empty>"}`),
+        ""
+      ];
+      const result = triggerBuild(target, params);
+      if (!result.success) {
+        return errorResult(`${lines.join("\n")}Build trigger failed: ${result.error}`);
+      }
+      lines.push(`Build queued: ${result.queueUrl}`);
+      if (input.watch === true && result.queueUrl) {
+        lines.push("Waiting for build to start...");
+        const maxWait = 6e4;
+        const start = Date.now();
+        while (Date.now() - start < maxWait) {
+          const q = getQueueStatus(result.queueUrl);
+          if (q.buildUrl) {
+            lines.push(`Build started: ${q.buildUrl}`);
+            const status = getBuildStatus(q.buildUrl, 10);
+            if (status.number)
+              lines.push(`Build #${status.number}`);
+            if (status.building) {
+              lines.push("Status: BUILDING");
+            } else {
+              lines.push(`Status: ${status.result || "UNKNOWN"}`);
+            }
+            if (status.consoleLines.length > 0) {
+              lines.push("", "Console (last 10 lines):");
+              lines.push(...status.consoleLines);
+            }
+            return textResult(lines.join("\n"));
+          }
+          lines.push(`  Queue: ${q.reason}`);
+          await new Promise((r) => setTimeout(r, 3e3));
+        }
+        lines.push("Timed out waiting for build to start. Use jenkins_status with the queue URL to check later.");
+      }
+      return textResult(lines.join("\n"));
+    }
+  );
+}
+
+// src/tools/jenkins-status.tool.ts
+function registerJenkinsStatusTool(server2) {
+  defineTool(
+    server2,
+    "jenkins_status",
+    "Check Jenkins build status. Pass a build URL to get status + console output, or a queue URL to check if the build has started.",
+    {
+      url: external_exports.string().describe("Jenkins build URL or queue URL"),
+      lines: external_exports.number().optional().describe("Number of console lines to show (default: 20)")
+    },
+    async (input) => {
+      const url = input.url.trim();
+      const consoleLines = input.lines || 20;
+      if (url.includes("/queue/")) {
+        const q = getQueueStatus(url);
+        if (q.buildUrl) {
+          const status2 = getBuildStatus(q.buildUrl, consoleLines);
+          return textResult(formatBuildStatus(status2, consoleLines));
+        }
+        return textResult(`Build not started yet.
+Reason: ${q.reason}
+Queue URL: ${url}`);
+      }
+      const status = getBuildStatus(url, consoleLines);
+      return textResult(formatBuildStatus(status, consoleLines));
+    }
+  );
+}
+function formatBuildStatus(status, lines) {
+  const parts = [];
+  if (status.url)
+    parts.push(`Build URL: ${status.url}`);
+  if (status.number)
+    parts.push(`Build #${status.number}`);
+  if (status.building) {
+    parts.push("Status: BUILDING...");
+  } else {
+    parts.push(`Status: ${status.result || "UNKNOWN"}`);
+  }
+  if (status.consoleLines.length > 0) {
+    parts.push("", `Console (last ${lines} lines):`, ...status.consoleLines);
+  }
+  return parts.join("\n");
+}
+
 // src/tools/index.ts
 function registerTools(server2) {
   registerConfigureTool(server2);
@@ -4530,11 +5026,15 @@ function registerTools(server2) {
   registerEcsUpdateServiceTool(server2);
   registerSsoStatusTool(server2);
   registerSsoRefreshTool(server2);
+  registerJenkinsConfigureTool(server2);
+  registerJenkinsListTool(server2);
+  registerJenkinsBuildTool(server2);
+  registerJenkinsStatusTool(server2);
 }
 
 // src/main.ts
 var server = new import_mcp.McpServer(
-  { name: "dev-tools", version: "0.4.0" },
+  { name: "dev-tools", version: "0.5.0" },
   { capabilities: { tools: {} } }
 );
 registerTools(server);

@@ -87,8 +87,8 @@
     },
     {
       "name": "dev-tools",
-      "version": "0.4.0",
-      "description": "AWS dev tools exposed as MCP tools — ECS management and SSO credential refresh.",
+      "version": "0.5.0",
+      "description": "AWS and Jenkins dev tools exposed as MCP tools — ECS management, SSO credentials, and Jenkins CI builds.",
       "source": "./plugins/dev-tools",
       "author": {
         "name": "Andaman N.",

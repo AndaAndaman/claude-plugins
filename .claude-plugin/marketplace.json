@@ -77,8 +77,8 @@
     },
     {
       "name": "feature-sprint",
-      "version": "0.5.1",
-      "description": "Scope-driven feature development. Subagents for tiny/small/medium (fast). Agent Teams for large (analysts collaborate, implementers self-coordinate, reviewer auto-starts).",
+      "version": "0.6.0",
+      "description": "Scope-driven feature development. /sprint for one-shot features. /sprint-loop for long-lived sessions where agents accumulate context across iterations.",
       "source": "./plugins/feature-sprint",
       "author": {
         "name": "FlowAccount Developer",

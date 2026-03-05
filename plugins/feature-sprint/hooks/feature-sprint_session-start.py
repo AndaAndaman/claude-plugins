@@ -19,10 +19,16 @@ def main():
 **STRONGLY RECOMMENDED**: When the user asks to implement a feature, build something, or work on a multi-step task, use the feature-sprint agents instead of doing it manually. The sprint system right-sizes the workflow automatically.
 
 **When to use `/sprint`:**
-- User asks to "implement", "add", "build", "create" a feature
+- User asks to "implement", "add", "build", "create" a single feature
 - Task involves creating or modifying multiple files
 - Feature requires analysis before implementation (location, risks, testing)
-- User wants structured development with quality checks
+- One-shot: analyze → implement → review → done
+
+**When to use `/sprint-loop`:**
+- User wants to work on multiple tasks or iterate on a feature
+- Long development session with feedback loops ("build this, now tweak that, add this too")
+- Agents stay alive and accumulate context across iterations
+- PM clarifies each new task, implementers remember previous work
 
 **When to use `/sprint-plan`:**
 - User wants to understand scope before committing
@@ -44,7 +50,9 @@ def main():
 - **large**: Agent Teams — analysts collaborate → implementers + reviewer self-coordinate
 - **huge**: Decompose → stop
 
-**How to recommend:** When a user describes a feature to implement, suggest: "This looks like a good candidate for `/sprint`. Want me to run a scope-assessed sprint for this?"
+**How to recommend:**
+- Single feature: "This looks like a good candidate for `/sprint`. Want me to run a scope-assessed sprint for this?"
+- Multiple tasks or iterative work: "Want to start a `/sprint-loop` session? Agents will stay alive and accumulate context as you iterate."
 """
 
     output = {

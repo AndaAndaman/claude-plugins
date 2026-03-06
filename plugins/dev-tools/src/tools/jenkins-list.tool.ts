@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { defineTool, textResult } from '../shared/mcp-helpers.js';
-import { BUILD_TARGETS, PREPROD_OVERRIDES, loadJenkinsConfig } from '../shared/jenkins.js';
+import { BUILD_TARGETS, PREPROD_OVERRIDES, loadJenkinsConfig, resolveJobPath } from '../shared/jenkins.js';
 
 export function registerJenkinsListTool(server: McpServer): void {
   defineTool(
@@ -16,7 +16,7 @@ export function registerJenkinsListTool(server: McpServer): void {
       ];
 
       for (const [key, target] of Object.entries(BUILD_TARGETS)) {
-        const jobPath = target.jobPathOverride || config.jobPaths[target.jobPathKey];
+        const jobPath = resolveJobPath(target, config);
         const envOverrides = config.environment === 'preprod'
           ? (PREPROD_OVERRIDES[key] || {})
           : {};

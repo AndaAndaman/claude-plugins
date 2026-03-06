@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 
 // ---------- Config ----------
 
@@ -181,7 +181,7 @@ export const BUILD_TARGETS: Record<string, BuildTarget> = {
     name: 'lambda-pdf-preview',
     description: 'Lambda PDF Preview',
     jobPathKey: 'lambda',
-    jobPathOverride: 'staging/job/workspace/job/lambda-pdf-preview-build',
+    jobPathOverride: '{env}/job/workspace/job/lambda-pdf-preview-build',
     defaults: {
       BranchName: 'main',
       lambda: 'lambda.pdf-preview',
@@ -210,9 +210,29 @@ export const PREPROD_OVERRIDES: Record<string, Record<string, string>> = {
   'api-doc':       { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },
   'api-profile':   { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },
   'open-api':      { COMMIT_HASH: 'canary-preprod', STAGE: 'preprod-ns' },
+  'lambda-pdf-preview': { configuration: 'preprod', AliasesName: 'preprod-ac' },
+  'lambda-pdf-gen':     { BranchName: 'a-preprod', configuration: 'preprod' },
 };
 
+// ---------- Helpers ----------
+
+export function resolveJobPath(target: BuildTarget, config: JenkinsConfig): string {
+  if (target.jobPathOverride) {
+    return target.jobPathOverride.replace('{env}', config.environment);
+  }
+  return config.jobPaths[target.jobPathKey];
+}
+
 // ---------- HTTP helpers ----------
+
+function runCurl(args: string[], timeout = 30000): { raw: string; ok: boolean } {
+  const result = spawnSync('curl', args, {
+    encoding: 'utf8',
+    maxBuffer: 5 * 1024 * 1024,
+    timeout,
+  });
+  return { raw: result.stdout ?? '', ok: result.status === 0 };
+}
 
 function curlJson(url: string, config: JenkinsConfig, method = 'GET', data?: string[]): { status: number; body: string; headers: string } {
   const auth = `${config.user}:${config.token}`;
@@ -226,24 +246,19 @@ function curlJson(url: string, config: JenkinsConfig, method = 'GET', data?: str
   }
   args.push(url);
 
-  try {
-    const raw = execSync(`curl ${args.map(a => `"${a}"`).join(' ')}`, {
-      encoding: 'utf8',
-      maxBuffer: 5 * 1024 * 1024,
-      timeout: 30000,
-    });
-
-    // Split headers and body
-    const parts = raw.split(/\r?\n\r?\n/);
-    const headers = parts[0] || '';
-    const body = parts.slice(1).join('\n\n');
-    const statusMatch = headers.match(/HTTP\/[\d.]+ (\d+)/);
-    const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
-
-    return { status, body, headers };
-  } catch (e: any) {
-    return { status: 0, body: e.message || 'curl failed', headers: '' };
+  const { raw, ok } = runCurl(args);
+  if (!ok && !raw) {
+    return { status: 0, body: 'curl failed', headers: '' };
   }
+
+  // Split headers and body
+  const parts = raw.split(/\r?\n\r?\n/);
+  const headers = parts[0] || '';
+  const body = parts.slice(1).join('\n\n');
+  const statusMatch = headers.match(/HTTP\/[\d.]+ (\d+)/);
+  const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+
+  return { status, body, headers };
 }
 
 // ---------- Jenkins API ----------
@@ -281,11 +296,11 @@ export function triggerBuild(target: string, params: Record<string, string>): Tr
     ? (PREPROD_OVERRIDES[target] || {})
     : {};
   const merged = { ...bt.defaults, ...envOverrides, ...params };
-  const jobPath = bt.jobPathOverride || config.jobPaths[bt.jobPathKey];
+  const jobPath = resolveJobPath(bt, config);
   const url = `${config.url}/job/${jobPath}/buildWithParameters`;
 
-  // Build data params
-  const data = Object.entries(merged).map(([k, v]) => `${k}=${v}`);
+  // Build data params (URL-encode values to handle special characters)
+  const data = Object.entries(merged).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
 
   // Get CSRF crumb
   const crumb = getCrumb(config);
@@ -299,15 +314,9 @@ export function triggerBuild(target: string, params: Record<string, string>): Tr
   }
   args.push(url);
 
-  let raw: string;
-  try {
-    raw = execSync(`curl ${args.map(a => `"${a}"`).join(' ')}`, {
-      encoding: 'utf8',
-      maxBuffer: 5 * 1024 * 1024,
-      timeout: 30000,
-    });
-  } catch (e: any) {
-    return { success: false, error: `curl failed: ${e.message}` };
+  const { raw, ok } = runCurl(args);
+  if (!ok && !raw) {
+    return { success: false, error: 'curl failed' };
   }
 
   // Extract Location header for queue URL
@@ -330,7 +339,8 @@ export interface BuildStatus {
 
 export function getQueueStatus(queueUrl: string): { buildUrl?: string; waiting: boolean; reason?: string } {
   const config = loadJenkinsConfig();
-  const { body } = curlJson(`${queueUrl}api/json`, config);
+  const base = queueUrl.replace(/\/$/, '');
+  const { body } = curlJson(`${base}/api/json`, config);
 
   try {
     const data = JSON.parse(body);
@@ -361,28 +371,24 @@ export function abortBuild(url: string): { success: boolean; error?: string } {
   if (crumb) args.push('-H', `Jenkins-Crumb: ${crumb}`);
   args.push('-X', 'POST', stopUrl);
 
-  try {
-    const raw = execSync(`curl ${args.map(a => `"${a}"`).join(' ')}`, {
-      encoding: 'utf8',
-      maxBuffer: 5 * 1024 * 1024,
-      timeout: 15000,
-    });
-    const statusMatch = raw.match(/HTTP\/[\d.]+ (\d+)/);
-    const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
-    if (status >= 200 && status < 400) {
-      return { success: true };
-    }
-    return { success: false, error: `HTTP ${status} from Jenkins` };
-  } catch (e: any) {
-    return { success: false, error: `curl failed: ${e.message}` };
+  const { raw, ok } = runCurl(args, 15000);
+  if (!ok && !raw) {
+    return { success: false, error: 'curl failed' };
   }
+  const statusMatch = raw.match(/HTTP\/[\d.]+ (\d+)/);
+  const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+  if (status >= 200 && status < 400) {
+    return { success: true };
+  }
+  return { success: false, error: `HTTP ${status} from Jenkins` };
 }
 
 export function getBuildStatus(buildUrl: string, consoleLines = 20): BuildStatus {
   const config = loadJenkinsConfig();
+  const base = buildUrl.replace(/\/$/, '');
 
   // Get build JSON
-  const { body: buildBody } = curlJson(`${buildUrl}api/json`, config);
+  const { body: buildBody } = curlJson(`${base}/api/json`, config);
   let building = true;
   let result: string | null = null;
   let number: number | null = null;
@@ -396,16 +402,11 @@ export function getBuildStatus(buildUrl: string, consoleLines = 20): BuildStatus
 
   // Get console output
   let lines: string[] = [];
-  try {
-    const auth = `${config.user}:${config.token}`;
-    const raw = execSync(`curl -s -u "${auth}" "${buildUrl}consoleText"`, {
-      encoding: 'utf8',
-      maxBuffer: 5 * 1024 * 1024,
-      timeout: 15000,
-    });
-    const allLines = raw.split('\n');
+  const consoleResult = runCurl(['-s', '-u', `${config.user}:${config.token}`, `${base}/consoleText`], 15000);
+  if (consoleResult.raw) {
+    const allLines = consoleResult.raw.split('\n');
     lines = allLines.slice(-consoleLines);
-  } catch { /* ignore */ }
+  }
 
   return { building, result, number, url: buildUrl, consoleLines: lines };
 }

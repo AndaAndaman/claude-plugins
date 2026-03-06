@@ -27869,7 +27869,7 @@ var BUILD_TARGETS = {
     name: "lambda-pdf-preview",
     description: "Lambda PDF Preview",
     jobPathKey: "lambda",
-    jobPathOverride: "staging/job/workspace/job/lambda-pdf-preview-build",
+    jobPathOverride: "{env}/job/workspace/job/lambda-pdf-preview-build",
     defaults: {
       BranchName: "main",
       lambda: "lambda.pdf-preview",
@@ -27895,8 +27895,24 @@ var PREPROD_OVERRIDES = {
   "api-report": { COMMIT_HASH: "canary-preprod", BUILD_SITE: "ac", STAGE: "preprod" },
   "api-doc": { COMMIT_HASH: "canary-preprod", BUILD_SITE: "ac", STAGE: "preprod" },
   "api-profile": { COMMIT_HASH: "canary-preprod", BUILD_SITE: "ac", STAGE: "preprod" },
-  "open-api": { COMMIT_HASH: "canary-preprod", STAGE: "preprod-ns" }
+  "open-api": { COMMIT_HASH: "canary-preprod", STAGE: "preprod-ns" },
+  "lambda-pdf-preview": { configuration: "preprod", AliasesName: "preprod-ac" },
+  "lambda-pdf-gen": { BranchName: "a-preprod", configuration: "preprod" }
 };
+function resolveJobPath(target, config2) {
+  if (target.jobPathOverride) {
+    return target.jobPathOverride.replace("{env}", config2.environment);
+  }
+  return config2.jobPaths[target.jobPathKey];
+}
+function runCurl(args, timeout = 3e4) {
+  const result = (0, import_node_child_process2.spawnSync)("curl", args, {
+    encoding: "utf8",
+    maxBuffer: 5 * 1024 * 1024,
+    timeout
+  });
+  return { raw: result.stdout ?? "", ok: result.status === 0 };
+}
 function curlJson(url2, config2, method = "GET", data) {
   const auth = `${config2.user}:${config2.token}`;
   const args = ["-s", "-i", "-u", auth];
@@ -27908,21 +27924,16 @@ function curlJson(url2, config2, method = "GET", data) {
     }
   }
   args.push(url2);
-  try {
-    const raw = (0, import_node_child_process2.execSync)(`curl ${args.map((a) => `"${a}"`).join(" ")}`, {
-      encoding: "utf8",
-      maxBuffer: 5 * 1024 * 1024,
-      timeout: 3e4
-    });
-    const parts = raw.split(/\r?\n\r?\n/);
-    const headers = parts[0] || "";
-    const body = parts.slice(1).join("\n\n");
-    const statusMatch = headers.match(/HTTP\/[\d.]+ (\d+)/);
-    const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
-    return { status, body, headers };
-  } catch (e) {
-    return { status: 0, body: e.message || "curl failed", headers: "" };
+  const { raw, ok } = runCurl(args);
+  if (!ok && !raw) {
+    return { status: 0, body: "curl failed", headers: "" };
   }
+  const parts = raw.split(/\r?\n\r?\n/);
+  const headers = parts[0] || "";
+  const body = parts.slice(1).join("\n\n");
+  const statusMatch = headers.match(/HTTP\/[\d.]+ (\d+)/);
+  const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+  return { status, body, headers };
 }
 function getCrumb(config2) {
   const { body } = curlJson(`${config2.url}/crumbIssuer/api/json`, config2);
@@ -27944,9 +27955,9 @@ function triggerBuild(target, params) {
   }
   const envOverrides = config2.environment === "preprod" ? PREPROD_OVERRIDES[target] || {} : {};
   const merged = { ...bt.defaults, ...envOverrides, ...params };
-  const jobPath = bt.jobPathOverride || config2.jobPaths[bt.jobPathKey];
+  const jobPath = resolveJobPath(bt, config2);
   const url2 = `${config2.url}/job/${jobPath}/buildWithParameters`;
-  const data = Object.entries(merged).map(([k, v]) => `${k}=${v}`);
+  const data = Object.entries(merged).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
   const crumb = getCrumb(config2);
   const args = ["-s", "-i", "-u", `${config2.user}:${config2.token}`];
   if (crumb)
@@ -27956,15 +27967,9 @@ function triggerBuild(target, params) {
     args.push("--data", d);
   }
   args.push(url2);
-  let raw;
-  try {
-    raw = (0, import_node_child_process2.execSync)(`curl ${args.map((a) => `"${a}"`).join(" ")}`, {
-      encoding: "utf8",
-      maxBuffer: 5 * 1024 * 1024,
-      timeout: 3e4
-    });
-  } catch (e) {
-    return { success: false, error: `curl failed: ${e.message}` };
+  const { raw, ok } = runCurl(args);
+  if (!ok && !raw) {
+    return { success: false, error: "curl failed" };
   }
   const locMatch = raw.match(/Location:\s*(\S+)/i);
   if (!locMatch) {
@@ -27975,7 +27980,8 @@ function triggerBuild(target, params) {
 }
 function getQueueStatus(queueUrl) {
   const config2 = loadJenkinsConfig();
-  const { body } = curlJson(`${queueUrl}api/json`, config2);
+  const base = queueUrl.replace(/\/$/, "");
+  const { body } = curlJson(`${base}/api/json`, config2);
   try {
     const data = JSON.parse(body);
     const execUrl = data?.executable?.url;
@@ -27999,25 +28005,21 @@ function abortBuild(url2) {
   if (crumb)
     args.push("-H", `Jenkins-Crumb: ${crumb}`);
   args.push("-X", "POST", stopUrl);
-  try {
-    const raw = (0, import_node_child_process2.execSync)(`curl ${args.map((a) => `"${a}"`).join(" ")}`, {
-      encoding: "utf8",
-      maxBuffer: 5 * 1024 * 1024,
-      timeout: 15e3
-    });
-    const statusMatch = raw.match(/HTTP\/[\d.]+ (\d+)/);
-    const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
-    if (status >= 200 && status < 400) {
-      return { success: true };
-    }
-    return { success: false, error: `HTTP ${status} from Jenkins` };
-  } catch (e) {
-    return { success: false, error: `curl failed: ${e.message}` };
+  const { raw, ok } = runCurl(args, 15e3);
+  if (!ok && !raw) {
+    return { success: false, error: "curl failed" };
   }
+  const statusMatch = raw.match(/HTTP\/[\d.]+ (\d+)/);
+  const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+  if (status >= 200 && status < 400) {
+    return { success: true };
+  }
+  return { success: false, error: `HTTP ${status} from Jenkins` };
 }
 function getBuildStatus(buildUrl, consoleLines = 20) {
   const config2 = loadJenkinsConfig();
-  const { body: buildBody } = curlJson(`${buildUrl}api/json`, config2);
+  const base = buildUrl.replace(/\/$/, "");
+  const { body: buildBody } = curlJson(`${base}/api/json`, config2);
   let building = true;
   let result = null;
   let number3 = null;
@@ -28029,16 +28031,10 @@ function getBuildStatus(buildUrl, consoleLines = 20) {
   } catch {
   }
   let lines = [];
-  try {
-    const auth = `${config2.user}:${config2.token}`;
-    const raw = (0, import_node_child_process2.execSync)(`curl -s -u "${auth}" "${buildUrl}consoleText"`, {
-      encoding: "utf8",
-      maxBuffer: 5 * 1024 * 1024,
-      timeout: 15e3
-    });
-    const allLines = raw.split("\n");
+  const consoleResult = runCurl(["-s", "-u", `${config2.user}:${config2.token}`, `${base}/consoleText`], 15e3);
+  if (consoleResult.raw) {
+    const allLines = consoleResult.raw.split("\n");
     lines = allLines.slice(-consoleLines);
-  } catch {
   }
   return { building, result, number: number3, url: buildUrl, consoleLines: lines };
 }
@@ -28123,7 +28119,7 @@ function registerJenkinsListTool(server2) {
         "=".repeat(50)
       ];
       for (const [key, target] of Object.entries(BUILD_TARGETS)) {
-        const jobPath = target.jobPathOverride || config2.jobPaths[target.jobPathKey];
+        const jobPath = resolveJobPath(target, config2);
         const envOverrides = config2.environment === "preprod" ? PREPROD_OVERRIDES[key] || {} : {};
         const effectiveDefaults = { ...target.defaults, ...envOverrides };
         lines.push("");
@@ -28296,7 +28292,7 @@ function registerTools(server2) {
 
 // src/main.ts
 var server = new McpServer(
-  { name: "dev-tools", version: "0.5.5" },
+  { name: "dev-tools", version: "0.6.0" },
   { capabilities: { tools: {} } }
 );
 registerTools(server);

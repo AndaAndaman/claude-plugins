@@ -3,88 +3,79 @@ import { z } from 'zod';
 import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
 import { BUILD_TARGETS, PREPROD_OVERRIDES, triggerBuild, getQueueStatus, getBuildStatus, loadJenkinsConfig } from '../shared/jenkins.js';
 
+// Only show these key params in build summary
+const SUMMARY_KEYS = ['COMMIT_HASH', 'BranchName', 'BUILD_SITE', 'SITE', 'STAGE', 'SERVICE_NAME', 'configuration'];
+
 export function registerJenkinsBuildTool(server: McpServer): void {
   defineTool(
     server,
     'jenkins_build',
-    `Trigger a Jenkins build. Available targets: ${Object.keys(BUILD_TARGETS).join(', ')}. Pass params as JSON to override defaults. Returns queue URL. Use watch=true to wait for build to start and return build URL.`,
+    `Trigger a Jenkins build. Targets: ${Object.keys(BUILD_TARGETS).join(', ')}. Use watch=true to poll until build starts.`,
     {
       target: z.string().describe(`Build target: ${Object.keys(BUILD_TARGETS).join(', ')}`),
-      params: z.string().optional().describe('JSON object of parameter overrides, e.g. {"COMMIT_HASH":"main","SITE":"acc"}'),
-      watch: z.boolean().optional().describe('Wait for build to start and return build URL (default: false)'),
+      params: z.string().optional().describe('JSON overrides, e.g. {"COMMIT_HASH":"main"}'),
+      watch: z.boolean().optional().describe('Wait for build to start (default: false)'),
     },
     async (input) => {
       const target = input.target as string;
 
       if (!BUILD_TARGETS[target]) {
-        return errorResult(`Unknown target: ${target}\nAvailable: ${Object.keys(BUILD_TARGETS).join(', ')}`);
+        return errorResult(`Unknown target: ${target}. Available: ${Object.keys(BUILD_TARGETS).join(', ')}`);
       }
 
-      // Parse params
       let params: Record<string, string> = {};
       if (input.params) {
         try {
           params = JSON.parse(input.params as string);
         } catch {
-          return errorResult('Invalid params JSON. Expected: {"KEY":"value", ...}');
+          return errorResult('Invalid params JSON.');
         }
       }
 
-      // Show what we're building (with environment-aware defaults)
       const bt = BUILD_TARGETS[target];
       const config = loadJenkinsConfig();
       const envOverrides = config.environment === 'preprod'
         ? (PREPROD_OVERRIDES[target] || {})
         : {};
       const merged = { ...bt.defaults, ...envOverrides, ...params };
+
+      // Compact summary: only key params + any user overrides
+      const showKeys = new Set([...SUMMARY_KEYS, ...Object.keys(params)]);
+      const summary = Object.entries(merged)
+        .filter(([k]) => showKeys.has(k))
+        .map(([k, v]) => `${k}=${v || '""'}`)
+        .join('  ');
+
       const lines: string[] = [
-        `Triggering ${bt.description}...`,
-        'Parameters:',
-        ...Object.entries(merged).map(([k, v]) => `  ${k}: ${v || '<empty>'}`),
-        '',
+        `[${config.environment}] ${target}: ${summary}`,
       ];
 
-      // Trigger
       const result = triggerBuild(target, params);
       if (!result.success) {
-        return errorResult(`${lines.join('\n')}Build trigger failed: ${result.error}`);
+        return errorResult(`${lines[0]}\nFailed: ${result.error}`);
       }
 
-      lines.push(`Build queued: ${result.queueUrl}`);
+      lines.push(`Queued: ${result.queueUrl}`);
 
-      // Optionally wait for build to start
       if (input.watch === true && result.queueUrl) {
-        lines.push('Waiting for build to start...');
-
-        const maxWait = 60000; // 60s max
+        const maxWait = 60000;
         const start = Date.now();
 
         while (Date.now() - start < maxWait) {
           const q = getQueueStatus(result.queueUrl);
           if (q.buildUrl) {
-            lines.push(`Build started: ${q.buildUrl}`);
-
-            // Get initial status
             const status = getBuildStatus(q.buildUrl, 10);
-            if (status.number) lines.push(`Build #${status.number}`);
-            if (status.building) {
-              lines.push('Status: BUILDING');
-            } else {
-              lines.push(`Status: ${status.result || 'UNKNOWN'}`);
-            }
+            lines.push(`Build #${status.number || '?'} ${status.building ? 'BUILDING' : status.result || 'UNKNOWN'} ${q.buildUrl}`);
             if (status.consoleLines.length > 0) {
-              lines.push('', 'Console (last 10 lines):');
+              lines.push('--- console (last 10) ---');
               lines.push(...status.consoleLines);
             }
             return textResult(lines.join('\n'));
           }
-
-          lines.push(`  Queue: ${q.reason}`);
-          // Wait 3s between polls
           await new Promise(r => setTimeout(r, 3000));
         }
 
-        lines.push('Timed out waiting for build to start. Use jenkins_status with the queue URL to check later.');
+        lines.push('Timed out. Use jenkins_status with queue URL.');
       }
 
       return textResult(lines.join('\n'));

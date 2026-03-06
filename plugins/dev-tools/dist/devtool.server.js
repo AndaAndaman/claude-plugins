@@ -27304,9 +27304,6 @@ function setTagValue(value) {
 function getConfig() {
   return { ...load() };
 }
-function getConfigPath() {
-  return CONFIG_FILE;
-}
 
 // src/shared/aws.ts
 function runAws(args) {
@@ -27538,11 +27535,11 @@ function registerConfigureTool(server2) {
   defineTool(
     server2,
     "aws_configure",
-    "Configure AWS settings used by all tools. Settings persist to ~/.config/dev-tools/config.json. Call without arguments to see current config.",
+    "View or update AWS settings (profile, tagKey, tagValue). Persists to ~/.config/dev-tools/config.json.",
     {
-      profile: external_exports4.string().optional().describe("AWS CLI profile name (default: basic_profile)"),
-      tagKey: external_exports4.string().optional().describe("ECS service tag key for filtering (default: acc-sandbox)"),
-      tagValue: external_exports4.string().optional().describe("ECS service tag value for filtering (default: core,profile,report,doc,ui,my)")
+      profile: external_exports4.string().optional().describe("AWS CLI profile name"),
+      tagKey: external_exports4.string().optional().describe("ECS service tag key for filtering"),
+      tagValue: external_exports4.string().optional().describe("ECS service tag value for filtering")
     },
     async (input) => {
       const before = getConfig();
@@ -27559,23 +27556,18 @@ function registerConfigureTool(server2) {
         setTagValue(input.tagValue);
         changed = true;
       }
-      const after = getConfig();
+      const c = getConfig();
       if (!changed) {
-        return textResult([
-          `Current AWS configuration (${getConfigPath()}):`,
-          `  profile:  ${after.profile}`,
-          `  tagKey:   ${after.tagKey}`,
-          `  tagValue: ${after.tagValue}`
-        ].join("\n"));
+        return textResult(`AWS: profile=${c.profile} tag=${c.tagKey}:${c.tagValue}`);
       }
-      const lines = [`AWS configuration updated (saved to ${getConfigPath()}):`];
+      const changes = [];
       if (input.profile !== void 0)
-        lines.push(`  profile:  ${before.profile} \u2192 ${after.profile}`);
+        changes.push(`profile: ${before.profile} \u2192 ${c.profile}`);
       if (input.tagKey !== void 0)
-        lines.push(`  tagKey:   ${before.tagKey} \u2192 ${after.tagKey}`);
+        changes.push(`tagKey: ${before.tagKey} \u2192 ${c.tagKey}`);
       if (input.tagValue !== void 0)
-        lines.push(`  tagValue: ${before.tagValue} \u2192 ${after.tagValue}`);
-      return textResult(lines.join("\n"));
+        changes.push(`tagValue: ${before.tagValue} \u2192 ${c.tagValue}`);
+      return textResult(`Updated: ${changes.join(", ")}`);
     }
   );
 }
@@ -27772,9 +27764,6 @@ function saveJenkinsConfig(config2) {
   cached2 = current2;
   (0, import_node_fs3.mkdirSync)(CONFIG_DIR2, { recursive: true });
   (0, import_node_fs3.writeFileSync)(JENKINS_CONFIG_FILE, JSON.stringify(current2, null, 2) + "\n", "utf8");
-}
-function getJenkinsConfigPath() {
-  return JENKINS_CONFIG_FILE;
 }
 var BUILD_TARGETS = {
   ui: {
@@ -28044,12 +28033,12 @@ function registerJenkinsConfigureTool(server2) {
   defineTool(
     server2,
     "jenkins_configure",
-    "Configure Jenkins connection settings. Call without arguments to see current config. Settings persist to ~/.config/dev-tools/jenkins.json.",
+    "View or update Jenkins settings (url, user, token, environment). Persists to ~/.config/dev-tools/jenkins.json.",
     {
       url: external_exports4.string().optional().describe("Jenkins base URL"),
       user: external_exports4.string().optional().describe("Jenkins API username"),
       token: external_exports4.string().optional().describe("Jenkins API token"),
-      environment: external_exports4.enum(["staging", "preprod"]).optional().describe("Environment \u2014 switches job paths automatically")
+      environment: external_exports4.enum(["staging", "preprod"]).optional().describe("Switches job paths automatically")
     },
     async (input) => {
       const before = loadJenkinsConfig();
@@ -28071,138 +28060,126 @@ function registerJenkinsConfigureTool(server2) {
         updates.token = input.token;
         changed = true;
       }
-      if (changed) {
+      if (changed)
         saveJenkinsConfig(updates);
-      }
-      const after = loadJenkinsConfig();
-      const tokenDisplay = after.token ? after.token.slice(0, 6) + "..." : "<not set>";
+      const c = loadJenkinsConfig();
+      const tok = c.token ? c.token.slice(0, 6) + "..." : "<not set>";
       if (!changed) {
-        return textResult([
-          `Jenkins configuration (${getJenkinsConfigPath()}):`,
-          `  url:         ${after.url}`,
-          `  user:        ${after.user}`,
-          `  token:       ${tokenDisplay}`,
-          `  environment: ${after.environment}`,
-          `  job paths:`,
-          `    ui:     ${after.jobPaths.ui}`,
-          `    api:    ${after.jobPaths.api}`,
-          `    lambda: ${after.jobPaths.lambda}`
-        ].join("\n"));
+        return textResult(`Jenkins [${c.environment}] url=${c.url} user=${c.user} token=${tok}`);
       }
-      const lines = [`Jenkins configuration updated (${getJenkinsConfigPath()}):`];
+      const changes = [];
       if (input.url !== void 0)
-        lines.push(`  url: ${before.url} \u2192 ${after.url}`);
+        changes.push(`url: ${before.url} \u2192 ${c.url}`);
       if (input.user !== void 0)
-        lines.push(`  user: ${before.user} \u2192 ${after.user}`);
+        changes.push(`user: ${before.user} \u2192 ${c.user}`);
       if (input.token !== void 0)
-        lines.push(`  token: updated`);
-      if (input.environment !== void 0) {
-        lines.push(`  environment: ${before.environment} \u2192 ${after.environment}`);
-        lines.push(`  job paths updated for ${after.environment}`);
-      }
-      return textResult(lines.join("\n"));
+        changes.push("token: updated");
+      if (input.environment !== void 0)
+        changes.push(`env: ${before.environment} \u2192 ${c.environment}`);
+      return textResult(`Updated: ${changes.join(", ")}`);
     }
   );
 }
 
 // src/tools/jenkins-list.tool.ts
+var SUMMARY_KEYS = ["COMMIT_HASH", "BranchName", "BUILD_SITE", "SITE", "STAGE", "SERVICE_NAME", "configuration"];
 function registerJenkinsListTool(server2) {
   defineTool(
     server2,
     "jenkins_list_targets",
-    "List all available Jenkins build targets with their default parameters.",
-    {},
-    async () => {
+    "List available Jenkins build targets. Use verbose=true to see all parameters.",
+    {
+      verbose: external_exports4.boolean().optional().describe("Show all default parameters (default: false, shows summary)")
+    },
+    async (input) => {
       const config2 = loadJenkinsConfig();
+      const verbose = input.verbose === true;
       const lines = [
-        `Jenkins Build Targets (environment: ${config2.environment})`,
-        "=".repeat(50)
+        `Jenkins Targets [${config2.environment}]`,
+        ""
       ];
       for (const [key, target] of Object.entries(BUILD_TARGETS)) {
-        const jobPath = resolveJobPath(target, config2);
         const envOverrides = config2.environment === "preprod" ? PREPROD_OVERRIDES[key] || {} : {};
-        const effectiveDefaults = { ...target.defaults, ...envOverrides };
-        lines.push("");
-        lines.push(`${key} \u2014 ${target.description}`);
-        lines.push(`  Job: ${jobPath}`);
-        lines.push("  Defaults:");
-        for (const [k, v] of Object.entries(effectiveDefaults)) {
-          lines.push(`    ${k}: ${v || "<empty>"}`);
+        const defaults = { ...target.defaults, ...envOverrides };
+        if (verbose) {
+          const jobPath = resolveJobPath(target, config2);
+          lines.push(`${key} \u2014 ${target.description} (${jobPath})`);
+          for (const [k, v] of Object.entries(defaults)) {
+            lines.push(`  ${k}: ${v || "<empty>"}`);
+          }
+          lines.push("");
+        } else {
+          const summary = SUMMARY_KEYS.filter((k) => k in defaults).map((k) => `${k}=${defaults[k] || '""'}`).join("  ");
+          lines.push(`  ${key.padEnd(20)} ${summary}`);
         }
       }
-      lines.push("");
-      lines.push('Usage: jenkins_build with target="<name>" and optional params to override defaults.');
+      if (!verbose) {
+        lines.push("");
+        lines.push("Use verbose=true for full parameters.");
+      }
+      lines.push(`Trigger: jenkins_build target="<name>" [params='{"KEY":"val"}']`);
       return textResult(lines.join("\n"));
     }
   );
 }
 
 // src/tools/jenkins-build.tool.ts
+var SUMMARY_KEYS2 = ["COMMIT_HASH", "BranchName", "BUILD_SITE", "SITE", "STAGE", "SERVICE_NAME", "configuration"];
 function registerJenkinsBuildTool(server2) {
   defineTool(
     server2,
     "jenkins_build",
-    `Trigger a Jenkins build. Available targets: ${Object.keys(BUILD_TARGETS).join(", ")}. Pass params as JSON to override defaults. Returns queue URL. Use watch=true to wait for build to start and return build URL.`,
+    `Trigger a Jenkins build. Targets: ${Object.keys(BUILD_TARGETS).join(", ")}. Use watch=true to poll until build starts.`,
     {
       target: external_exports4.string().describe(`Build target: ${Object.keys(BUILD_TARGETS).join(", ")}`),
-      params: external_exports4.string().optional().describe('JSON object of parameter overrides, e.g. {"COMMIT_HASH":"main","SITE":"acc"}'),
-      watch: external_exports4.boolean().optional().describe("Wait for build to start and return build URL (default: false)")
+      params: external_exports4.string().optional().describe('JSON overrides, e.g. {"COMMIT_HASH":"main"}'),
+      watch: external_exports4.boolean().optional().describe("Wait for build to start (default: false)")
     },
     async (input) => {
       const target = input.target;
       if (!BUILD_TARGETS[target]) {
-        return errorResult(`Unknown target: ${target}
-Available: ${Object.keys(BUILD_TARGETS).join(", ")}`);
+        return errorResult(`Unknown target: ${target}. Available: ${Object.keys(BUILD_TARGETS).join(", ")}`);
       }
       let params = {};
       if (input.params) {
         try {
           params = JSON.parse(input.params);
         } catch {
-          return errorResult('Invalid params JSON. Expected: {"KEY":"value", ...}');
+          return errorResult("Invalid params JSON.");
         }
       }
       const bt = BUILD_TARGETS[target];
       const config2 = loadJenkinsConfig();
       const envOverrides = config2.environment === "preprod" ? PREPROD_OVERRIDES[target] || {} : {};
       const merged = { ...bt.defaults, ...envOverrides, ...params };
+      const showKeys = /* @__PURE__ */ new Set([...SUMMARY_KEYS2, ...Object.keys(params)]);
+      const summary = Object.entries(merged).filter(([k]) => showKeys.has(k)).map(([k, v]) => `${k}=${v || '""'}`).join("  ");
       const lines = [
-        `Triggering ${bt.description}...`,
-        "Parameters:",
-        ...Object.entries(merged).map(([k, v]) => `  ${k}: ${v || "<empty>"}`),
-        ""
+        `[${config2.environment}] ${target}: ${summary}`
       ];
       const result = triggerBuild(target, params);
       if (!result.success) {
-        return errorResult(`${lines.join("\n")}Build trigger failed: ${result.error}`);
+        return errorResult(`${lines[0]}
+Failed: ${result.error}`);
       }
-      lines.push(`Build queued: ${result.queueUrl}`);
+      lines.push(`Queued: ${result.queueUrl}`);
       if (input.watch === true && result.queueUrl) {
-        lines.push("Waiting for build to start...");
         const maxWait = 6e4;
         const start = Date.now();
         while (Date.now() - start < maxWait) {
           const q = getQueueStatus(result.queueUrl);
           if (q.buildUrl) {
-            lines.push(`Build started: ${q.buildUrl}`);
             const status = getBuildStatus(q.buildUrl, 10);
-            if (status.number)
-              lines.push(`Build #${status.number}`);
-            if (status.building) {
-              lines.push("Status: BUILDING");
-            } else {
-              lines.push(`Status: ${status.result || "UNKNOWN"}`);
-            }
+            lines.push(`Build #${status.number || "?"} ${status.building ? "BUILDING" : status.result || "UNKNOWN"} ${q.buildUrl}`);
             if (status.consoleLines.length > 0) {
-              lines.push("", "Console (last 10 lines):");
+              lines.push("--- console (last 10) ---");
               lines.push(...status.consoleLines);
             }
             return textResult(lines.join("\n"));
           }
-          lines.push(`  Queue: ${q.reason}`);
           await new Promise((r) => setTimeout(r, 3e3));
         }
-        lines.push("Timed out waiting for build to start. Use jenkins_status with the queue URL to check later.");
+        lines.push("Timed out. Use jenkins_status with queue URL.");
       }
       return textResult(lines.join("\n"));
     }
@@ -28214,42 +28191,30 @@ function registerJenkinsStatusTool(server2) {
   defineTool(
     server2,
     "jenkins_status",
-    "Check Jenkins build status. Pass a build URL to get status + console output, or a queue URL to check if the build has started.",
+    "Check Jenkins build or queue status with console output.",
     {
       url: external_exports4.string().describe("Jenkins build URL or queue URL"),
-      lines: external_exports4.number().optional().describe("Number of console lines to show (default: 20)")
+      lines: external_exports4.number().optional().describe("Console lines to show (default: 20)")
     },
     async (input) => {
       const url2 = input.url.trim();
-      const consoleLines = input.lines || 20;
+      const numLines = input.lines || 20;
       if (url2.includes("/queue/")) {
         const q = getQueueStatus(url2);
         if (q.buildUrl) {
-          const status2 = getBuildStatus(q.buildUrl, consoleLines);
-          return textResult(formatBuildStatus(status2, consoleLines));
+          return textResult(formatStatus(getBuildStatus(q.buildUrl, numLines)));
         }
-        return textResult(`Build not started yet.
-Reason: ${q.reason}
-Queue URL: ${url2}`);
+        return textResult(`Queued: ${q.reason}`);
       }
-      const status = getBuildStatus(url2, consoleLines);
-      return textResult(formatBuildStatus(status, consoleLines));
+      return textResult(formatStatus(getBuildStatus(url2, numLines)));
     }
   );
 }
-function formatBuildStatus(status, lines) {
-  const parts = [];
-  if (status.url)
-    parts.push(`Build URL: ${status.url}`);
-  if (status.number)
-    parts.push(`Build #${status.number}`);
-  if (status.building) {
-    parts.push("Status: BUILDING...");
-  } else {
-    parts.push(`Status: ${status.result || "UNKNOWN"}`);
-  }
-  if (status.consoleLines.length > 0) {
-    parts.push("", `Console (last ${lines} lines):`, ...status.consoleLines);
+function formatStatus(s) {
+  const state = s.building ? "BUILDING" : s.result || "UNKNOWN";
+  const parts = [`#${s.number || "?"} ${state} ${s.url || ""}`];
+  if (s.consoleLines.length > 0) {
+    parts.push("--- console ---", ...s.consoleLines);
   }
   return parts.join("\n");
 }
@@ -28292,7 +28257,7 @@ function registerTools(server2) {
 
 // src/main.ts
 var server = new McpServer(
-  { name: "dev-tools", version: "0.6.0" },
+  { name: "dev-tools", version: "0.6.1" },
   { capabilities: { tools: {} } }
 );
 registerTools(server);

@@ -1,7 +1,7 @@
 {
   "name": "feature-sprint",
-  "version": "0.7.0",
-  "description": "Scope-driven feature development. /sprint for one-shot features (subagents or Agent Teams by scope). /sprint-loop for long-lived sessions where agents accumulate context across iterations.",
+  "version": "0.8.0",
+  "description": "Scope-driven feature development. /sprint for one-shot features. /sprint-loop for long-lived sessions with dynamic agent scaling (spawn on demand, message-driven wake-up, idle = free).",
   "author": {
     "name": "FlowAccount Developer",
     "email": "dev@flowaccount.com"

@@ -1,6 +1,6 @@
 ---
 name: sprint-loop
-description: "Long-lived development session with persistent agents. PM clarifies and sizes tasks, implementers accumulate context across iterations, reviewer checks each round. Agents stay alive until user says done."
+description: "Long-lived development session with dynamic agent scaling. PM sizes tasks and requests agents on demand. Agents spawn on first need, stay alive forever (idle = free), wake on message. User says done to teardown."
 arguments:
   - name: goal
     description: "Initial goal or first task for the session"
@@ -23,13 +23,36 @@ allowed-tools:
   - AskUserQuestion
 ---
 
-# Sprint Loop v2 - Self-Coordinating Team
+# Sprint Loop v3 - Dynamic Team, Message-Driven
 
-You orchestrate a **persistent development team** that stays alive across multiple iterations. Unlike `/sprint` (one feature -> teardown), this keeps agents alive so they accumulate context and work faster with each task.
+You orchestrate a **persistent development team** that grows on demand. Agents spawn when first needed, stay alive forever (idle = zero token cost), and wake up when messaged. No polling, no shutdown mid-session.
 
-**Key principle v2**: PM drives task creation, agents self-coordinate via TaskList, lead only handles user interaction. No lead bottleneck.
+**Key principles v3**:
+- PM drives task creation AND requests which agents are needed
+- Agents wake on message, not by polling TaskList
+- Spawn on first need, never kill (idle = free)
+- Lead tracks which agents are alive, spawns new ones when PM requests
 
 **Initial Goal**: {{ goal }}
+
+---
+
+## Agent Registry
+
+Track which agents are currently alive. Start empty except PM.
+
+```
+ALIVE_AGENTS = { "pm": true }
+```
+
+Available agent pool (spawn when first needed):
+- `scout` — codebase location analysis
+- `guard` — risk identification
+- `tester` — test strategy
+- `impl-1` — primary implementer
+- `impl-2` — second implementer (for LARGE)
+- `impl-3` — third implementer (for LARGE+)
+- `reviewer` — code review
 
 ---
 
@@ -44,9 +67,9 @@ TEAM_NAME = "loop-" + slugify(first 3-4 words of goal) + "-" + last 4 chars of t
 TeamCreate(team_name: TEAM_NAME, description: "Dev session: {{ goal }}")
 ```
 
-## Phase 1: Spawn Core Team (Once)
+## Phase 1: Spawn PM Only
 
-Spawn all core agents in a **SINGLE message**. They stay alive for the entire session.
+Start with just PM. Everything else spawns on demand.
 
 ```
 Task(feature-sprint:pm)
@@ -55,148 +78,244 @@ Task(feature-sprint:pm)
   prompt: "You are the PM/PO for a long-lived development session.
            Goal: {{ goal }}
 
-           YOUR ROLE: When the team lead sends you a task description,
-           assess its scope, then CREATE AND ASSIGN TASKS DIRECTLY.
+           YOUR ROLE: When the team lead messages you with a task, assess
+           scope, create tasks, AND tell the lead which agents are needed.
 
            WORKFLOW:
-           1. Receive task description from lead
+           1. Receive task description from lead via message
            2. Search codebase to assess scope (use Glob/Grep/Read)
            3. Determine scope: TINY / SMALL / MEDIUM / LARGE / HUGE
-           4. For SMALL/MEDIUM/LARGE: Create implementation tasks directly
-              via TaskCreate with detailed descriptions including:
-              - What to implement
-              - Which files to create/modify
-              - Patterns to follow (from codebase search)
-              - Risk mitigations
-           5. Assign tasks: TaskUpdate(owner: 'impl-1') for implementation,
-              TaskUpdate(owner: 'reviewer') for review tasks
-           6. Set dependencies: review tasks blockedBy implementation tasks
-           7. Message lead with scope summary AFTER tasks are created
+           4. Create tasks via TaskCreate with detailed descriptions
+           5. Message lead with STRUCTURED RESPONSE (see format below)
 
-           SCOPE-BASED TASK CREATION:
+           RESPONSE FORMAT (CRITICAL — lead parses this):
+           ```
+           SCOPE: [TINY|SMALL|MEDIUM|LARGE|HUGE]
+           AGENTS_NEEDED: [comma-separated list, e.g. impl-1,reviewer]
+           SUMMARY: [1-2 sentence description]
+           ```
 
-           TINY: Message lead 'TINY - [description]'. Lead handles directly.
+           SCOPE → AGENTS_NEEDED mapping:
 
-           SMALL: Create 1 implementation task (assign impl-1). No review.
-                  Message lead: 'SMALL - 1 task created, impl-1 assigned'
+           TINY:
+             AGENTS_NEEDED: none
+             Action: Message lead 'SCOPE: TINY' with description. Lead handles.
 
-           MEDIUM: Create 1 impl task (assign impl-1) + 1 review task
-                   (assign reviewer, blockedBy impl). Message lead:
-                   'MEDIUM - impl + review tasks created'
+           SMALL:
+             AGENTS_NEEDED: impl-1
+             Action: Create 1 impl task (assign impl-1). No review needed.
 
-           LARGE: Scout codebase first. Create 2+ impl tasks with file
-                  ownership splits (assign impl-1, impl-2). Create 1
-                  review task (blockedBy all impl tasks, assign reviewer).
-                  Message lead: 'LARGE - N tasks created, need impl-2'
-                  (lead will spawn impl-2 if not already alive)
+           MEDIUM:
+             AGENTS_NEEDED: impl-1,reviewer
+             Action: Create 1 impl task (assign impl-1) + 1 review task
+             (assign reviewer, blockedBy impl task).
 
-           HUGE: Message lead with decomposition suggestions. Do NOT
-                 create tasks. Let lead discuss with user first.
+           MEDIUM with unfamiliar codebase area:
+             AGENTS_NEEDED: scout,impl-1,reviewer
+             Action: Create scout task first, then impl + review tasks.
+             Scout task description: what to find and where to look.
 
-           IMPORTANT: Include enough detail in task descriptions for
-           implementers to work autonomously. They should NOT need to
-           message you for clarification.
+           LARGE:
+             AGENTS_NEEDED: scout,guard,impl-1,impl-2,reviewer
+             Action: Create scout + guard tasks (parallel). Then create
+             2+ impl tasks with file ownership splits + review task.
+
+           LARGE with test coverage needs:
+             AGENTS_NEEDED: scout,guard,tester,impl-1,impl-2,reviewer
+             Action: Full analysis + implementation + review.
+
+           HUGE:
+             AGENTS_NEEDED: none
+             Action: Message lead with decomposition. Do NOT create tasks.
+
+           TASK DESCRIPTIONS must include:
+           - What to implement (specific and detailed)
+           - Which files to create/modify
+           - Patterns to follow (from your codebase search)
+           - Risk mitigations (if guard not involved, include basic risks)
+           - For scout/guard/tester: what specifically to analyze
+
+           MESSAGING AGENTS (CRITICAL):
+           After creating tasks, message EACH assigned agent directly:
+             SendMessage(to: 'impl-1', message: 'New task created: [title]. Check TaskList.')
+             SendMessage(to: 'reviewer', message: 'Review task created, blocked by impl. You will be notified.')
+           This is how agents wake up. Do NOT rely on them polling.
 
            You stay alive for the entire session. Build on context from
-           previous tasks for faster assessment.
+           previous tasks. Each assessment gets faster as you learn the codebase.
 
-           When idle, wait for the next task from the lead."
-
-Task(feature-sprint:implementer)
-  team_name: TEAM_NAME
-  name: "impl-1"
-  prompt: "You are an implementer in a long-lived development session.
-           Goal: {{ goal }}
-
-           YOUR ROLE: WATCH TaskList for implementation tasks. When you
-           see unclaimed tasks assigned to you, start working immediately.
-
-           SELF-COORDINATING WORKFLOW:
-           1. After spawning and after completing each task, check TaskList
-           2. Look for tasks with owner='impl-1' and status='pending'
-              that are NOT blocked (empty blockedBy)
-           3. Claim it: TaskUpdate(status: 'in_progress')
-           4. Implement following the description (PM includes all details)
-           5. Mark complete: TaskUpdate(status: 'completed')
-           6. Check TaskList again for more work
-           7. If no more tasks, message lead: 'All my tasks done. [summary]'
-
-           KEY ADVANTAGES OF STAYING ALIVE:
-           - You accumulate codebase knowledge with each task
-           - You remember what you built in previous iterations
-           - You can fix your own code when reviewer gives feedback
-
-           REVIEWER FEEDBACK:
-           If reviewer messages you with fix requests, apply fixes and
-           confirm back to reviewer directly (not through lead).
-
-           DO NOT message lead for every task completion. Only message
-           lead when ALL your assigned tasks are done or you hit a blocker.
-
-           When idle and no tasks available, wait."
-
-Task(feature-sprint:reviewer)
-  team_name: TEAM_NAME
-  name: "reviewer"
-  prompt: "You are the reviewer in a long-lived development session.
-           Goal: {{ goal }}
-
-           YOUR ROLE: WATCH TaskList for review tasks. When review tasks
-           become unblocked (their blockedBy tasks are all completed),
-           start reviewing immediately.
-
-           SELF-COORDINATING WORKFLOW:
-           1. After spawning and periodically, check TaskList
-           2. Look for review tasks assigned to you that are unblocked
-           3. Claim it: TaskUpdate(status: 'in_progress')
-           4. Read all files mentioned in the task description
-           5. Review for correctness, integration, code quality, security
-
-           FEEDBACK LOOP (max 2 rounds per task):
-           - If BLOCKERs found: message the specific implementer DIRECTLY
-             (e.g., SendMessage to 'impl-1' with specific fix requests)
-           - Wait for implementer's fix confirmation
-           - Re-read and verify the fix
-           - If still broken after 2 rounds, report to lead
-
-           WHEN REVIEW PASSES:
-           1. Mark review task completed: TaskUpdate(status: 'completed')
-           2. Message lead with final report (PASS/FAIL, issues found/fixed)
-
-           DO NOT wait for lead to tell you to start reviewing.
-           Watch TaskList and start as soon as your tasks unblock.
-
-           You stay alive across iterations. Use context from previous
-           reviews to catch recurring patterns.
-
-           When idle and no review tasks available, wait."
+           When idle, wait for the next message from the lead."
 ```
 
-## Phase 2: Process Initial Goal
+Mark PM as alive: `ALIVE_AGENTS.pm = true`
 
-Send the initial goal to PM:
+## Phase 2: Process Initial Goal
 
 ```
 SendMessage(to: "pm", message: "New task: {{ goal }}")
 ```
 
-**DO NOT create tasks yourself.** PM will:
-1. Assess scope
-2. Create and assign tasks directly
-3. Message you back with scope summary
+Wait for PM's response. Then follow **Lead Response Handler**.
 
-When PM messages back:
-- **TINY**: PM says it's tiny — do it yourself, present to user
-- **SMALL/MEDIUM/LARGE**: PM already created tasks. Agents self-coordinate.
-  Just acknowledge and wait for completion reports.
-- **LARGE + needs impl-2**: PM requests impl-2 spawn. Spawn it, then wait.
-- **HUGE**: PM suggests decomposition. Present to user for decision.
+---
+
+## Lead Response Handler
+
+When PM messages back with scope:
+
+### 1. Parse PM Response
+
+Read SCOPE, AGENTS_NEEDED, and SUMMARY from PM's message.
+
+### 2. Ensure Agents Are Alive
+
+For each agent in AGENTS_NEEDED:
+- If already in ALIVE_AGENTS → do nothing (PM already messaged them)
+- If NOT alive → **spawn it now**, then PM messages it
+
+**Spawn templates** (use when agent doesn't exist yet):
+
+```
+# For scout (first spawn)
+Task(feature-sprint:scout)
+  team_name: TEAM_NAME
+  name: "scout"
+  prompt: "You are the Scout in a long-lived development session.
+           Goal: {{ goal }}
+
+           YOU ARE MESSAGE-DRIVEN. Do NOT poll TaskList.
+           When PM or lead messages you, check TaskList for your tasks,
+           claim them (TaskUpdate → in_progress), do the work, mark
+           complete (TaskUpdate → completed), and message the lead
+           with your findings. Then go idle and wait for next message.
+
+           You stay alive and accumulate codebase knowledge across tasks.
+           Each scout task gets faster as you learn the codebase map."
+```
+
+```
+# For guard (first spawn)
+Task(feature-sprint:guard)
+  team_name: TEAM_NAME
+  name: "guard"
+  prompt: "You are the Guard in a long-lived development session.
+           Goal: {{ goal }}
+
+           YOU ARE MESSAGE-DRIVEN. Do NOT poll TaskList.
+           When PM or lead messages you, check TaskList for your tasks,
+           claim them, identify risks, mark complete, and message lead
+           with your Risk Brief. Then go idle and wait.
+
+           You stay alive and remember risks from previous tasks.
+           Flag if a new task re-introduces a previously identified risk."
+```
+
+```
+# For tester (first spawn)
+Task(feature-sprint:tester)
+  team_name: TEAM_NAME
+  name: "tester"
+  prompt: "You are the Tester in a long-lived development session.
+           Goal: {{ goal }}
+
+           YOU ARE MESSAGE-DRIVEN. Do NOT poll TaskList.
+           When PM or lead messages you, check TaskList for your tasks,
+           claim them, define test strategy, mark complete, and message
+           lead with your Test Brief. Then go idle and wait.
+
+           You stay alive and track cumulative test coverage across tasks."
+```
+
+```
+# For impl-1 (first spawn)
+Task(feature-sprint:implementer)
+  team_name: TEAM_NAME
+  name: "impl-1"
+  prompt: "You are Implementer-1 in a long-lived development session.
+           Goal: {{ goal }}
+
+           YOU ARE MESSAGE-DRIVEN. Do NOT poll TaskList.
+           When PM or lead messages you about a new task:
+           1. Check TaskList for tasks assigned to you (owner='impl-1')
+           2. Claim it: TaskUpdate(status: 'in_progress')
+           3. Implement following the task description
+           4. Mark complete: TaskUpdate(status: 'completed')
+           5. Message lead: 'Task done. [brief summary of changes]'
+           6. Go idle and wait for next message
+
+           REVIEWER FEEDBACK:
+           If reviewer messages you with fix requests, apply fixes and
+           message reviewer back directly when done.
+
+           You accumulate codebase knowledge. Each task gets faster."
+```
+
+```
+# For impl-2 (first spawn, only when LARGE)
+Task(feature-sprint:implementer)
+  team_name: TEAM_NAME
+  name: "impl-2"
+  prompt: "[Same as impl-1 but owner='impl-2']"
+```
+
+```
+# For impl-3 (first spawn, only when needed)
+Task(feature-sprint:implementer)
+  team_name: TEAM_NAME
+  name: "impl-3"
+  prompt: "[Same as impl-1 but owner='impl-3']"
+```
+
+```
+# For reviewer (first spawn)
+Task(feature-sprint:reviewer)
+  team_name: TEAM_NAME
+  name: "reviewer"
+  prompt: "You are the Reviewer in a long-lived development session.
+           Goal: {{ goal }}
+
+           YOU ARE MESSAGE-DRIVEN. Do NOT poll TaskList.
+           When PM messages you about a review task:
+           1. The review task is blockedBy implementation tasks
+           2. Wait for PM or implementers to message you that impl is done
+              (or check TaskList to see if blockers are completed)
+           3. Claim review task: TaskUpdate(status: 'in_progress')
+           4. Read all files from task description
+           5. Review for correctness, integration, quality
+
+           FEEDBACK LOOP (max 2 rounds):
+           - BLOCKERs: message the specific implementer directly
+           - Wait for their fix confirmation
+           - Re-read and verify
+           - After resolution or 2 rounds: message lead with final report
+
+           You stay alive and track recurring patterns across reviews."
+```
+
+After spawning, update ALIVE_AGENTS and let PM know:
+```
+SendMessage(to: "pm", message: "[agent-name] is now alive and ready.")
+```
+
+### 3. Route by Scope
+
+- **TINY**: Do it yourself (lead), present to user
+- **SMALL/MEDIUM/LARGE**: Agents are alive and PM already messaged them. Wait for completion reports.
+- **HUGE**: Present PM's decomposition to user for decision
+
+### 4. Wait for Completion
+
+Agents message lead when done:
+- impl-1/impl-2/impl-3: "Task done. [summary]"
+- reviewer: "Review complete. [PASS/FAIL + details]"
+
+Collect all reports, then present to user.
 
 ---
 
 ## Main Loop: Process User Input
 
-After receiving completion report from reviewer (or impl-1 for SMALL), present results and wait for user input via AskUserQuestion:
+After presenting results, wait for user input via AskUserQuestion:
 
 ```
 Task complete. What's next?
@@ -207,72 +326,40 @@ Task complete. What's next?
 
 ### When user gives a NEW TASK:
 
-1. **Send to PM**:
-   ```
-   SendMessage(to: "pm", message: "New task: [user's input]")
-   ```
-2. PM handles everything (scope + task creation + assignment)
-3. Wait for agents to self-coordinate and report back
+```
+SendMessage(to: "pm", message: "New task: [user's input]")
+```
+
+PM assesses, creates tasks, requests agents. Follow Lead Response Handler.
 
 ### When user gives FEEDBACK or TWEAKS:
 
-Small corrections that don't need PM assessment (e.g., "fix the alignment", "change the color"):
+Small corrections on just-modified code (skip PM):
 
-1. **Skip PM** — create implementation task directly
-2. TaskCreate with feedback, assign to impl-1
-3. If non-trivial, create review task too (blockedBy impl task)
-4. Agents pick up from TaskList
+1. Create impl task directly: TaskCreate with feedback
+2. Message impl-1: `SendMessage(to: "impl-1", message: "Quick fix task created. Check TaskList.")`
+3. If non-trivial, create review task too and message reviewer when impl completes
 
-**How to decide**: If the feedback references specific code that was just modified, skip PM. If it introduces new scope, send to PM.
+**How to decide**: References specific recent code → skip PM. New scope → send to PM.
 
 ### When user says "DONE":
 
-Go to **Teardown** phase.
-
----
-
-## Scaling Rules
-
-**Start lean, scale up:**
-- Session starts with 1 implementer (impl-1)
-- If PM assesses LARGE and requests impl-2, spawn it:
-  ```
-  Task(feature-sprint:implementer)
-    team_name: TEAM_NAME
-    name: "impl-2"
-    prompt: "[same self-coordinating instructions as impl-1, but owner='impl-2']"
-  ```
-- Never spawn more than 3 implementers total
-- Extra implementers persist — they accumulate context too
-
-**PM doubles as scout:**
-- PM searches codebase during scope assessment (has Glob/Grep/Read)
-- PM includes location guidance directly in task descriptions
-- No separate scout phase needed — PM embeds it in task creation
-
-**Lead's only jobs:**
-1. Relay user goals to PM
-2. Spawn additional agents when PM requests
-3. Handle TINY tasks directly
-4. Present results to user
-5. Handle HUGE decomposition discussions
-6. Teardown
+Go to **Teardown**.
 
 ---
 
 ## Teardown
 
-When user says "done":
-
 1. Present session summary:
    ```
    Session Summary:
-   - Tasks completed: [count]
+   - Tasks completed: [count from TaskList]
    - Files modified: [list]
+   - Agents used: [list from ALIVE_AGENTS]
    - Review status: [all approved / issues remaining]
    ```
 
-2. Send shutdown_request to all teammates
+2. Send shutdown_request to ALL agents in ALIVE_AGENTS
 3. Wait for confirmations
 4. TeamDelete(team_name: TEAM_NAME)
 5. DONE
@@ -281,10 +368,10 @@ When user says "done":
 
 ## Error Handling
 
-- If PM goes idle unexpectedly: resume or respawn with same name
-- If implementer fails mid-task: present partial work, let user decide
-- If reviewer fails: skip review for this round, continue
-- If user goes quiet: agents stay alive (no timeout from lead)
+- If PM goes idle: resume or respawn
+- If agent fails mid-task: present partial work, ask user
+- If reviewer fails: skip review for this round
+- If spawned agent doesn't respond to message: check if alive, respawn if needed
 - Always cleanup team on any exit path
 
 ## Architecture Summary
@@ -292,24 +379,36 @@ When user says "done":
 ```
 /sprint-loop "build user profile"
     |
-    TeamCreate("loop-build-user-profile-a3f2")
+    TeamCreate + spawn PM only
     |
-    +-- PM (alive) <-- scopes + CREATES TASKS + assigns agents
-    +-- impl-1 (alive) <-- watches TaskList, auto-claims, implements
-    +-- reviewer (alive) <-- watches TaskList, auto-claims when unblocked
+    Task 1: "build user profile page"
+    |   Lead -> PM (scope: MEDIUM, needs: impl-1,reviewer)
+    |   Lead spawns impl-1 + reviewer (first time)
+    |   PM messages impl-1 -> impl-1 works -> done
+    |   PM messages reviewer -> blocked -> impl done -> reviewer works -> done
+    |   Lead <- reports
     |
-    |   User: "build user profile page"
-    |   Lead -> PM -> [PM creates tasks] -> impl-1 auto-claims -> reviewer auto-claims -> Lead <- report
+    Task 2: "add avatar upload with API"
+    |   Lead -> PM (scope: LARGE, needs: scout,guard,impl-1,impl-2,reviewer)
+    |   Lead spawns scout + guard + impl-2 (first time; impl-1 + reviewer already alive)
+    |   PM messages all -> work in parallel -> done
+    |   Lead <- reports
     |
-    |   User: "add avatar upload too"
-    |   Lead -> PM -> [PM creates tasks, MEDIUM] -> impl-1 (has context!) -> reviewer -> Lead <- report
+    Task 3: "fix the button color"
+    |   Lead -> impl-1 directly (skip PM, quick tweak)
+    |   impl-1 fixes -> done
+    |   (scout, guard, impl-2, reviewer all idle = zero cost)
     |
-    |   User: "fix the button alignment"
-    |   Lead -> impl-1 (quick fix, skip PM)
+    Task 4: "add form validation"
+    |   Lead -> PM (scope: MEDIUM, needs: impl-1,reviewer)
+    |   Both already alive! PM messages them -> they wake up -> done
+    |   (scout, guard, impl-2 still idle = still free)
     |
-    |   User: "done"
-    |   Teardown all
+    "done" -> Teardown all
 ```
 
-**v2 key change**: PM creates tasks directly. Agents watch TaskList. Lead is NOT a message relay.
-The longer the session, the faster agents work — they already know the codebase.
+**v3 key changes**:
+- Message-driven: agents wake on SendMessage, not by polling
+- Dynamic scaling: spawn on first need, never kill (idle = free)
+- PM requests agents: lead doesn't guess, PM specifies AGENTS_NEEDED
+- Lean start: only PM at boot, everything else on demand

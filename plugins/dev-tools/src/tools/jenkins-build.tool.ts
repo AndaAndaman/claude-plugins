@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
-import { BUILD_TARGETS, triggerBuild, getQueueStatus, getBuildStatus } from '../shared/jenkins.js';
+import { BUILD_TARGETS, PREPROD_OVERRIDES, triggerBuild, getQueueStatus, getBuildStatus, loadJenkinsConfig } from '../shared/jenkins.js';
 
 export function registerJenkinsBuildTool(server: McpServer): void {
   defineTool(
@@ -30,9 +30,13 @@ export function registerJenkinsBuildTool(server: McpServer): void {
         }
       }
 
-      // Show what we're building
+      // Show what we're building (with environment-aware defaults)
       const bt = BUILD_TARGETS[target];
-      const merged = { ...bt.defaults, ...params };
+      const config = loadJenkinsConfig();
+      const envOverrides = config.environment === 'preprod'
+        ? (PREPROD_OVERRIDES[target] || {})
+        : {};
+      const merged = { ...bt.defaults, ...envOverrides, ...params };
       const lines: string[] = [
         `Triggering ${bt.description}...`,
         'Parameters:',

@@ -28167,7 +28167,9 @@ Available: ${Object.keys(BUILD_TARGETS).join(", ")}`);
         }
       }
       const bt = BUILD_TARGETS[target];
-      const merged = { ...bt.defaults, ...params };
+      const config2 = loadJenkinsConfig();
+      const envOverrides = config2.environment === "preprod" ? PREPROD_OVERRIDES[target] || {} : {};
+      const merged = { ...bt.defaults, ...envOverrides, ...params };
       const lines = [
         `Triggering ${bt.description}...`,
         "Parameters:",
@@ -28294,7 +28296,7 @@ function registerTools(server2) {
 
 // src/main.ts
 var server = new McpServer(
-  { name: "dev-tools", version: "0.5.4" },
+  { name: "dev-tools", version: "0.5.5" },
   { capabilities: { tools: {} } }
 );
 registerTools(server);

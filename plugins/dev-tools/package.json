@@ -3,8 +3,7 @@
   "version": "0.2.0",
   "description": "AWS CLI tools exposed as MCP tools",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/devtool.server.js --external:@modelcontextprotocol/sdk",
-    "build:bundle": "esbuild src/main.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/devtool.server.js"
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/devtool.server.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

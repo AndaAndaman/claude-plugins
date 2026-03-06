@@ -25,7 +25,7 @@ const STAGING_JOBS = {
 
 const PREPROD_JOBS = {
   ui: 'preprod/job/workspace/job/frontend',
-  api: 'preprod/job/workspace/job/dotnet.arm64',
+  api: 'preprod/job/dotnet/job/dotnet.arm64',
   lambda: 'preprod/job/workspace/job/lambda',
 };
 
@@ -202,6 +202,16 @@ export const BUILD_TARGETS: Record<string, BuildTarget> = {
   },
 };
 
+// Environment-aware default overrides (preprod values differ from staging)
+const PREPROD_OVERRIDES: Record<string, Record<string, string>> = {
+  ui:              { COMMIT_HASH: 'a-preprod', SITE: 'ac' },
+  api:             { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },
+  'api-report':    { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },
+  'api-doc':       { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },
+  'api-profile':   { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },
+  'open-api':      { COMMIT_HASH: 'canary-preprod', STAGE: 'preprod-ns' },
+};
+
 // ---------- HTTP helpers ----------
 
 function curlJson(url: string, config: JenkinsConfig, method = 'GET', data?: string[]): { status: number; body: string; headers: string } {
@@ -266,8 +276,11 @@ export function triggerBuild(target: string, params: Record<string, string>): Tr
     return { success: false, error: `Unknown target: ${target}. Available: ${Object.keys(BUILD_TARGETS).join(', ')}` };
   }
 
-  // Merge defaults with overrides
-  const merged = { ...bt.defaults, ...params };
+  // Merge defaults with environment overrides, then user params
+  const envOverrides = config.environment === 'preprod'
+    ? (PREPROD_OVERRIDES[target] || {})
+    : {};
+  const merged = { ...bt.defaults, ...envOverrides, ...params };
   const jobPath = bt.jobPathOverride || config.jobPaths[bt.jobPathKey];
   const url = `${config.url}/job/${jobPath}/buildWithParameters`;
 

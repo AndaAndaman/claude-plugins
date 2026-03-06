@@ -27733,7 +27733,7 @@ var STAGING_JOBS = {
 };
 var PREPROD_JOBS = {
   ui: "preprod/job/workspace/job/frontend",
-  api: "preprod/job/workspace/job/dotnet.arm64",
+  api: "preprod/job/dotnet/job/dotnet.arm64",
   lambda: "preprod/job/workspace/job/lambda"
 };
 var CONFIG_DIR2 = (0, import_node_path3.join)((0, import_node_os3.homedir)(), ".config", "dev-tools");
@@ -27889,6 +27889,14 @@ var BUILD_TARGETS = {
     }
   }
 };
+var PREPROD_OVERRIDES = {
+  ui: { COMMIT_HASH: "a-preprod", SITE: "ac" },
+  api: { COMMIT_HASH: "canary-preprod", BUILD_SITE: "ac", STAGE: "preprod" },
+  "api-report": { COMMIT_HASH: "canary-preprod", BUILD_SITE: "ac", STAGE: "preprod" },
+  "api-doc": { COMMIT_HASH: "canary-preprod", BUILD_SITE: "ac", STAGE: "preprod" },
+  "api-profile": { COMMIT_HASH: "canary-preprod", BUILD_SITE: "ac", STAGE: "preprod" },
+  "open-api": { COMMIT_HASH: "canary-preprod", STAGE: "preprod-ns" }
+};
 function curlJson(url2, config2, method = "GET", data) {
   const auth = `${config2.user}:${config2.token}`;
   const args = ["-s", "-i", "-u", auth];
@@ -27934,7 +27942,8 @@ function triggerBuild(target, params) {
   if (!bt) {
     return { success: false, error: `Unknown target: ${target}. Available: ${Object.keys(BUILD_TARGETS).join(", ")}` };
   }
-  const merged = { ...bt.defaults, ...params };
+  const envOverrides = config2.environment === "preprod" ? PREPROD_OVERRIDES[target] || {} : {};
+  const merged = { ...bt.defaults, ...envOverrides, ...params };
   const jobPath = bt.jobPathOverride || config2.jobPaths[bt.jobPathKey];
   const url2 = `${config2.url}/job/${jobPath}/buildWithParameters`;
   const data = Object.entries(merged).map(([k, v]) => `${k}=${v}`);
@@ -28233,7 +28242,7 @@ function registerTools(server2) {
 
 // src/main.ts
 var server = new McpServer(
-  { name: "dev-tools", version: "0.5.1" },
+  { name: "dev-tools", version: "0.5.2" },
   { capabilities: { tools: {} } }
 );
 registerTools(server);

@@ -344,6 +344,40 @@ export function getQueueStatus(queueUrl: string): { buildUrl?: string; waiting: 
   }
 }
 
+export function abortBuild(url: string): { success: boolean; error?: string } {
+  const config = loadJenkinsConfig();
+  if (!config.token) {
+    return { success: false, error: 'Jenkins token not configured. Run jenkins_configure first.' };
+  }
+
+  // Support both build URLs and queue URLs
+  const isQueue = url.includes('/queue/');
+  const stopUrl = isQueue
+    ? `${url.replace(/\/$/, '')}/cancelItem`
+    : `${url.replace(/\/$/, '')}/stop`;
+
+  const crumb = getCrumb(config);
+  const args = ['-s', '-i', '-u', `${config.user}:${config.token}`];
+  if (crumb) args.push('-H', `Jenkins-Crumb: ${crumb}`);
+  args.push('-X', 'POST', stopUrl);
+
+  try {
+    const raw = execSync(`curl ${args.map(a => `"${a}"`).join(' ')}`, {
+      encoding: 'utf8',
+      maxBuffer: 5 * 1024 * 1024,
+      timeout: 15000,
+    });
+    const statusMatch = raw.match(/HTTP\/[\d.]+ (\d+)/);
+    const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+    if (status >= 200 && status < 400) {
+      return { success: true };
+    }
+    return { success: false, error: `HTTP ${status} from Jenkins` };
+  } catch (e: any) {
+    return { success: false, error: `curl failed: ${e.message}` };
+  }
+}
+
 export function getBuildStatus(buildUrl: string, consoleLines = 20): BuildStatus {
   const config = loadJenkinsConfig();
 

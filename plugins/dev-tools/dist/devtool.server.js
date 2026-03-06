@@ -27987,6 +27987,34 @@ function getQueueStatus(queueUrl) {
     return { waiting: true, reason: "Cannot parse queue response" };
   }
 }
+function abortBuild(url2) {
+  const config2 = loadJenkinsConfig();
+  if (!config2.token) {
+    return { success: false, error: "Jenkins token not configured. Run jenkins_configure first." };
+  }
+  const isQueue = url2.includes("/queue/");
+  const stopUrl = isQueue ? `${url2.replace(/\/$/, "")}/cancelItem` : `${url2.replace(/\/$/, "")}/stop`;
+  const crumb = getCrumb(config2);
+  const args = ["-s", "-i", "-u", `${config2.user}:${config2.token}`];
+  if (crumb)
+    args.push("-H", `Jenkins-Crumb: ${crumb}`);
+  args.push("-X", "POST", stopUrl);
+  try {
+    const raw = (0, import_node_child_process2.execSync)(`curl ${args.map((a) => `"${a}"`).join(" ")}`, {
+      encoding: "utf8",
+      maxBuffer: 5 * 1024 * 1024,
+      timeout: 15e3
+    });
+    const statusMatch = raw.match(/HTTP\/[\d.]+ (\d+)/);
+    const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
+    if (status >= 200 && status < 400) {
+      return { success: true };
+    }
+    return { success: false, error: `HTTP ${status} from Jenkins` };
+  } catch (e) {
+    return { success: false, error: `curl failed: ${e.message}` };
+  }
+}
 function getBuildStatus(buildUrl, consoleLines = 20) {
   const config2 = loadJenkinsConfig();
   const { body: buildBody } = curlJson(`${buildUrl}api/json`, config2);
@@ -28226,6 +28254,27 @@ function formatBuildStatus(status, lines) {
   return parts.join("\n");
 }
 
+// src/tools/jenkins-abort.tool.ts
+function registerJenkinsAbortTool(server2) {
+  defineTool(
+    server2,
+    "jenkins_abort",
+    "Abort/cancel a Jenkins build or queued item. Pass the build URL or queue URL.",
+    {
+      url: external_exports4.string().describe("Jenkins build URL or queue URL to abort")
+    },
+    async (input) => {
+      const url2 = input.url.trim();
+      const result = abortBuild(url2);
+      if (result.success) {
+        const type = url2.includes("/queue/") ? "Queued item cancelled" : "Build aborted";
+        return textResult(`${type}: ${url2}`);
+      }
+      return errorResult(`Failed to abort: ${result.error}`);
+    }
+  );
+}
+
 // src/tools/index.ts
 function registerTools(server2) {
   registerConfigureTool(server2);
@@ -28238,11 +28287,12 @@ function registerTools(server2) {
   registerJenkinsListTool(server2);
   registerJenkinsBuildTool(server2);
   registerJenkinsStatusTool(server2);
+  registerJenkinsAbortTool(server2);
 }
 
 // src/main.ts
 var server = new McpServer(
-  { name: "dev-tools", version: "0.5.2" },
+  { name: "dev-tools", version: "0.5.3" },
   { capabilities: { tools: {} } }
 );
 registerTools(server);

@@ -31,12 +31,13 @@ Available MCP tools for AWS operations:
 - `jenkins_list_targets` - Show available build targets with default parameters
 - `jenkins_build` - Trigger a build (ui, api, api-report, api-doc, api-profile, open-api, lambda-pdf-preview, lambda-pdf-gen)
 - `jenkins_status` - Check build status + console output
+- `jenkins_abort` - Abort/cancel a running build or queued item
 
 **Typical workflows:**
 
 *AWS:* `aws_sso_status` -> `aws_sso_refresh` (if expired) -> `aws_ecs_list` -> `aws_ecs_update_service`
 
-*Jenkins:* `jenkins_configure` (set token once) -> `jenkins_list_targets` -> `jenkins_build` (target + params) -> `jenkins_status` (monitor)
+*Jenkins:* `jenkins_configure` (set token once) -> `jenkins_list_targets` -> `jenkins_build` (target + params) -> `jenkins_status` (monitor) -> `jenkins_abort` (if needed)
 """
 
     output = {

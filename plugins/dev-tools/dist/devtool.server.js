@@ -28124,11 +28124,13 @@ function registerJenkinsListTool(server2) {
       ];
       for (const [key, target] of Object.entries(BUILD_TARGETS)) {
         const jobPath = target.jobPathOverride || config2.jobPaths[target.jobPathKey];
+        const envOverrides = config2.environment === "preprod" ? PREPROD_OVERRIDES[key] || {} : {};
+        const effectiveDefaults = { ...target.defaults, ...envOverrides };
         lines.push("");
         lines.push(`${key} \u2014 ${target.description}`);
         lines.push(`  Job: ${jobPath}`);
         lines.push("  Defaults:");
-        for (const [k, v] of Object.entries(target.defaults)) {
+        for (const [k, v] of Object.entries(effectiveDefaults)) {
           lines.push(`    ${k}: ${v || "<empty>"}`);
         }
       }

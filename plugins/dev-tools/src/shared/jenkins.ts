@@ -203,7 +203,7 @@ export const BUILD_TARGETS: Record<string, BuildTarget> = {
 };
 
 // Environment-aware default overrides (preprod values differ from staging)
-const PREPROD_OVERRIDES: Record<string, Record<string, string>> = {
+export const PREPROD_OVERRIDES: Record<string, Record<string, string>> = {
   ui:              { COMMIT_HASH: 'a-preprod', SITE: 'ac' },
   api:             { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },
   'api-report':    { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },

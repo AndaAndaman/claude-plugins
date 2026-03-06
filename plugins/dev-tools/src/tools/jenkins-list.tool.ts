@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { defineTool, textResult } from '../shared/mcp-helpers.js';
-import { BUILD_TARGETS, loadJenkinsConfig } from '../shared/jenkins.js';
+import { BUILD_TARGETS, PREPROD_OVERRIDES, loadJenkinsConfig } from '../shared/jenkins.js';
 
 export function registerJenkinsListTool(server: McpServer): void {
   defineTool(
@@ -17,11 +17,15 @@ export function registerJenkinsListTool(server: McpServer): void {
 
       for (const [key, target] of Object.entries(BUILD_TARGETS)) {
         const jobPath = target.jobPathOverride || config.jobPaths[target.jobPathKey];
+        const envOverrides = config.environment === 'preprod'
+          ? (PREPROD_OVERRIDES[key] || {})
+          : {};
+        const effectiveDefaults = { ...target.defaults, ...envOverrides };
         lines.push('');
         lines.push(`${key} — ${target.description}`);
         lines.push(`  Job: ${jobPath}`);
         lines.push('  Defaults:');
-        for (const [k, v] of Object.entries(target.defaults)) {
+        for (const [k, v] of Object.entries(effectiveDefaults)) {
           lines.push(`    ${k}: ${v || '<empty>'}`);
         }
       }

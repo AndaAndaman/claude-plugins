@@ -135,6 +135,17 @@ Task(feature-sprint:pm)
            - Risk mitigations (if guard not involved, include basic risks)
            - For scout/guard/tester: what specifically to analyze
 
+           TEST REQUIREMENTS (include in every implementation task):
+           - Unit tests: MUST HAVE — implementer must write unit tests
+             and verify they pass before marking task complete
+           - Integration tests: GOOD TO HAVE — suggest in task description
+             as follow-up iteration if scope allows
+           - E2E tests: NICE TO HAVE — mention only for LARGE scope or
+             when user explicitly requests
+
+           Implementers must run build + unit tests before completing.
+           If tests fail, fix before reporting done.
+
            MESSAGING AGENTS (CRITICAL):
            After creating tasks, message EACH assigned agent directly:
              SendMessage(to: 'impl-1', message: 'New task created: [title]. Check TaskList.')
@@ -239,9 +250,11 @@ Task(feature-sprint:implementer)
            1. Check TaskList for tasks assigned to you (owner='impl-1')
            2. Claim it: TaskUpdate(status: 'in_progress')
            3. Implement following the task description
-           4. Mark complete: TaskUpdate(status: 'completed')
-           5. Message lead: 'Task done. [brief summary of changes]'
-           6. Go idle and wait for next message
+           4. Write unit tests (MANDATORY — every task must have tests)
+           5. Run build + unit tests. If they fail, fix before proceeding.
+           6. Mark complete: TaskUpdate(status: 'completed')
+           7. Message lead: 'Task done. [summary + test results]'
+           8. Go idle and wait for next message
 
            REVIEWER FEEDBACK:
            If reviewer messages you with fix requests, apply fixes and

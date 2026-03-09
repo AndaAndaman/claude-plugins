@@ -1,6 +1,6 @@
 {
   "name": "dev-tools",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "AWS and Jenkins dev tools exposed as MCP tools — ECS management, SSO credentials, and Jenkins CI builds",
   "mcpServers": {
     "dev-tools": {

@@ -28322,6 +28322,165 @@ function registerJenkinsEditConfigTool(server2) {
   );
 }
 
+// src/tools/git-command.tool.ts
+var import_node_child_process3 = require("node:child_process");
+function git(...args) {
+  const result = (0, import_node_child_process3.spawnSync)("git", args, {
+    encoding: "utf8",
+    maxBuffer: 5 * 1024 * 1024,
+    timeout: 6e4
+  });
+  return {
+    stdout: (result.stdout || "").trim(),
+    stderr: (result.stderr || "").trim(),
+    ok: result.status === 0
+  };
+}
+function currentBranch() {
+  const { stdout, ok } = git("branch", "--show-current");
+  return ok && stdout ? stdout : null;
+}
+function mergeTo(target) {
+  const branch = currentBranch();
+  if (!branch)
+    return "Error: not on a branch (detached HEAD).";
+  if (branch === target)
+    return `Already on ${target}.`;
+  const { stdout: status } = git("status", "--porcelain");
+  if (status)
+    return `Error: uncommitted changes. Commit or stash first.
+${status}`;
+  const lines = [`Merging ${branch} \u2192 ${target}`];
+  const checkout = git("checkout", target);
+  if (!checkout.ok)
+    return `Error switching to ${target}: ${checkout.stderr}`;
+  lines.push(`Switched to ${target}`);
+  const pull = git("pull", "--ff-only");
+  if (pull.ok)
+    lines.push("Pulled latest");
+  const merge2 = git("merge", branch, "--no-edit");
+  if (!merge2.ok) {
+    git("merge", "--abort");
+    git("checkout", branch);
+    return `Merge conflict. Aborted and returned to ${branch}.
+${merge2.stderr}`;
+  }
+  lines.push(`Merged ${branch} into ${target}`);
+  git("checkout", branch);
+  lines.push(`Switched back to ${branch}`);
+  return lines.join("\n");
+}
+function pullRebase() {
+  const branch = currentBranch();
+  if (!branch)
+    return "Error: not on a branch (detached HEAD).";
+  const { stdout: status } = git("status", "--porcelain");
+  if (status)
+    return `Error: uncommitted changes. Commit or stash first.
+${status}`;
+  const result = git("pull", "--rebase");
+  if (!result.ok) {
+    git("rebase", "--abort");
+    return `Rebase failed. Aborted.
+${result.stderr}`;
+  }
+  return result.stdout || "Already up to date.";
+}
+function rebase(base) {
+  const branch = currentBranch();
+  if (!branch)
+    return "Error: not on a branch (detached HEAD).";
+  if (branch === base)
+    return `Already on ${base}. Use rebase instead.`;
+  const { stdout: status } = git("status", "--porcelain");
+  if (status)
+    return `Error: uncommitted changes. Commit or stash first.
+${status}`;
+  const lines = [`Rebasing ${branch} onto origin/${base}`];
+  const fetch = git("fetch", "origin", base);
+  if (!fetch.ok)
+    return `Error fetching origin/${base}: ${fetch.stderr}`;
+  lines.push(`Fetched origin/${base}`);
+  const result = git("rebase", `origin/${base}`);
+  if (!result.ok) {
+    git("rebase", "--abort");
+    return `Rebase onto ${base} failed. Aborted.
+${result.stderr}`;
+  }
+  lines.push(result.stdout || `Rebased onto origin/${base}`);
+  return lines.join("\n");
+}
+function cherryPick(commit) {
+  const branch = currentBranch();
+  if (!branch)
+    return "Error: not on a branch (detached HEAD).";
+  const { stdout: status } = git("status", "--porcelain");
+  if (status)
+    return `Error: uncommitted changes. Commit or stash first.
+${status}`;
+  const result = git("cherry-pick", commit);
+  if (!result.ok) {
+    git("cherry-pick", "--abort");
+    return `Cherry-pick failed. Aborted.
+${result.stderr}`;
+  }
+  const log = git("log", "-1", "--oneline");
+  return `Cherry-picked: ${log.stdout}`;
+}
+function branchCleanup() {
+  const branch = currentBranch();
+  const mainBranch = git("rev-parse", "--verify", "main").ok ? "main" : "master";
+  const { stdout, ok } = git("branch", "--merged", mainBranch);
+  if (!ok)
+    return `Error listing merged branches.`;
+  const branches = stdout.split("\n").map((b) => b.trim().replace(/^\*\s*/, "")).filter((b) => b && b !== "main" && b !== "master" && b !== branch);
+  if (branches.length === 0)
+    return "No merged branches to clean up.";
+  const lines = [`Deleting ${branches.length} merged branch(es):`];
+  for (const b of branches) {
+    const del = git("branch", "-d", b);
+    lines.push(del.ok ? `  Deleted ${b}` : `  Failed: ${b} \u2014 ${del.stderr}`);
+  }
+  return lines.join("\n");
+}
+function registerGitCommandTool(server2) {
+  defineTool(
+    server2,
+    "git_command",
+    "Git workflow shortcuts: merge_to (merge current\u2192target), pull_rebase (pull --rebase), rebase (rebase onto origin branch), cherry_pick, branch_cleanup (delete merged branches).",
+    {
+      action: external_exports4.enum(["merge_to", "pull_rebase", "rebase", "cherry_pick", "branch_cleanup"]).describe(
+        "merge_to=merge current branch into target, pull_rebase=git pull --rebase, rebase=fetch + rebase onto origin branch, cherry_pick=pick a commit, branch_cleanup=delete merged branches"
+      ),
+      target: external_exports4.string().optional().describe('Target branch for merge_to or rebase (e.g. "main", "canary"). Default: "main"'),
+      commit: external_exports4.string().optional().describe("Commit hash for cherry_pick")
+    },
+    async (input) => {
+      const action = input.action;
+      if (action === "merge_to") {
+        if (!input.target)
+          return errorResult("merge_to requires target branch name.");
+        return textResult(mergeTo(input.target));
+      }
+      if (action === "pull_rebase") {
+        return textResult(pullRebase());
+      }
+      if (action === "rebase") {
+        return textResult(rebase(input.target || "main"));
+      }
+      if (action === "cherry_pick") {
+        if (!input.commit)
+          return errorResult("cherry_pick requires commit hash.");
+        return textResult(cherryPick(input.commit));
+      }
+      if (action === "branch_cleanup") {
+        return textResult(branchCleanup());
+      }
+      return errorResult("Unknown action.");
+    }
+  );
+}
+
 // src/tools/index.ts
 function registerTools(server2) {
   registerConfigureTool(server2);
@@ -28336,6 +28495,7 @@ function registerTools(server2) {
   registerJenkinsStatusTool(server2);
   registerJenkinsAbortTool(server2);
   registerJenkinsEditConfigTool(server2);
+  registerGitCommandTool(server2);
 }
 
 // src/main.ts

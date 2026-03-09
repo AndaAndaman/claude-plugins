@@ -1,22 +1,16 @@
 {
   "name": "md-to-skill",
-  "version": "0.8.7",
-  "description": "Continuous learning engine for Claude Code. Automatically observes coding patterns, builds instincts from repeated behaviors, and evolves validated instincts into reusable skills. Also converts markdown files into organized Claude skills.",
+  "version": "0.8.8",
+  "description": "Converts markdown files into organized Claude skills with intelligent candidate detection. Stop hook scores new markdown files across 6 signals to suggest high-confidence skill candidates.",
   "author": {
     "name": "FlowAccount Developer",
     "email": "dev@flowaccount.com"
   },
   "repository": "https://github.com/AndaAndaman/claude-plugins",
   "keywords": [
-    "continuous-learning",
-    "instincts",
-    "pattern-detection",
-    "observation",
-    "skill-evolution",
-    "auto-approve",
-    "knowledge-management",
     "skill-creation",
     "markdown-conversion",
+    "knowledge-management",
     "automation",
     "workflow"
   ]

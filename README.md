@@ -13,6 +13,7 @@ A plugin marketplace for Claude Code with development tools designed for FlowAcc
 /plugin install quick-wins@flowaccount-dev-tools
 /plugin install md-to-skill@flowaccount-dev-tools
 /plugin install feature-sprint@flowaccount-dev-tools
+/plugin install dev-tools@flowaccount-dev-tools
 ```
 
 Or test temporarily:
@@ -24,7 +25,7 @@ claude --plugin-dir ./plugins/md-to-skill
 
 ---
 
-### ask-before-code (v0.4.1)
+### ask-before-code (v0.4.2)
 
 **Problem:** Developers start coding before fully understanding the requirements. Hours get wasted building the wrong thing, then reworking it after clarification.
 
@@ -46,7 +47,7 @@ The Clarity Guardian agent monitors your conversation. When it detects a request
 
 ---
 
-### quick-wins (v0.3.4)
+### quick-wins (v0.3.5)
 
 **Problem:** Small code quality issues accumulate silently — unused imports, `any` types, missing error handling, outdated syntax. Each one is trivial alone, but together they become technical debt that slows the team down.
 
@@ -80,73 +81,35 @@ A Stop hook fires when you complete a task. It evaluates whether a quality scan 
 
 ---
 
-### md-to-skill (v0.8.4)
+### md-to-skill (v0.8.7)
 
-**Problem:** Knowledge gets lost between sessions. You discuss business rules, debug tricky issues, make architecture decisions — then next week, Claude starts from zero. The tool-use hooks capture what files you touched, but not what you learned.
+**Problem:** Valuable markdown content — LLM exports, documentation, architecture decisions — sits in files that Claude never sees. Meanwhile, the skill system provides a structured way to give Claude reusable knowledge, but creating skills manually is tedious.
 
-**Solution:** A continuous learning engine with two input sources — automatic tool-use observation and manual conversation knowledge extraction — feeding into a single instinct pipeline that grows patterns into reusable skills over time.
+**Solution:** Converts markdown files into organized Claude skills, with a Stop hook that automatically detects high-confidence skill candidates using multi-signal confidence scoring.
 
 **How it works:**
 
-```
-Session activity (automatic):
-  PostToolUse hooks → observations.jsonl
-  Captures: file patterns, edit corrections, command sequences, naming conventions
-
-Conversation knowledge (manual):
-  /extract-knowledge → observations.jsonl
-  Captures: business rules, domain terms, architecture decisions, debugging insights
-
-Both feed into:
-  /observe → instincts (confidence 0.3–0.95)
-           → auto-approve at 0.7
-           → /evolve clusters 3+ related instincts into full skills
-```
-
-Instincts are lightweight learned patterns with confidence scores. They start at 0.3, grow +0.1 per confirming observation, decay over time if not reinforced, and get pruned if they drop below 0.2 or go inactive for 60+ days. When 3+ related instincts in the same domain reach average confidence 0.5+, `/evolve` clusters them into a full Claude skill.
+When a session ends, the Stop hook scans for new markdown files written during the session. Each file is scored across 6 signals (instructional language, heading structure, content depth, code blocks, sections, lists) to produce a confidence score. Files scoring above threshold are suggested for conversion. The conversion pipeline analyzes structure, extracts code blocks, splits topics into references, generates frontmatter, and validates quality.
 
 **Commands:**
 
 | Command | Purpose |
 |---------|---------|
-| `/observe` | Process accumulated observations into instincts. Supports `--auto`, `--patterns` (dry run), `--since`, `--replay` |
-| `/extract-knowledge [topic]` | Extract business knowledge from conversation into the instinct pipeline via Python one-liner (correct timestamp/JSON format) |
-| `/evolve` | Cluster mature instincts into full skills |
 | `/convert-to-skill <file>` | Convert a markdown file directly into a skill |
 | `/learn-skill [dir]` | Batch scan directory for skill candidates |
 | `/skill-shopping [task]` | Recommend relevant installed skills for your current task |
-| `/instinct-status` | View all instincts with confidence, domain, staleness |
-| `/instinct-prune` | Remove stale or low-confidence instincts |
-| `/instinct-merge` | Combine duplicate instincts |
-| `/instinct-reject` | Block an instinct from being suggested again |
-| `/instinct-export` | Export instincts to portable JSON |
-| `/instinct-import` | Import instincts from another project |
-| `/instinct-export-context` | Export auto-approved instincts as CLAUDE.md context |
-| `/observe-health` | Check observation pipeline health |
-| `/skill-health` | Skill usage analytics and health status |
-
-**Hooks:**
-
-| Hook | Event | What it does |
-|------|-------|-------------|
-| observe_posttooluse.py | PostToolUse (Write/Edit/Bash/Read) | Records tool-use metadata to observations.jsonl |
-| structural_posttooluse.py | PostToolUse (Write/Edit/Bash) | Captures code structure (imports, functions, classes, decorators) |
-| instinct-suggest_pretooluse.py | PreToolUse (Write/Edit/Bash/Read) | Suggests relevant auto-approved instincts before tool execution |
-| skill_posttooluse.py | PostToolUse (Skill) | Tracks skill usage and reinforces source instincts (+0.02 confidence) |
-| md-watch_stop.py | Stop | Detects new markdown files that could become skills |
 
 **Components:**
 | Component | Role |
 |-----------|------|
-| skill-builder agent | Converts markdown/instinct clusters into skill structure |
-| learning-observer agent | Deep pattern analysis beyond hook-level detection |
-| continuous-learning skill | Documents the instinct lifecycle methodology |
+| skill-builder agent | Converts markdown into skill structure |
+| Stop hook (md-watch) | Scores new markdown files using 6 weighted signals |
 | markdown-parsing skill | Techniques for parsing markdown structure |
 | skill-structure-patterns skill | Templates and best practices for skill creation |
 
 ---
 
-### feature-sprint (v0.5.1)
+### feature-sprint (v0.8.2)
 
 **Problem:** Feature implementation either gets under-planned (jump in, hit issues, rework) or over-planned (spend hours on architecture documents nobody reads). The right amount of planning depends on the feature's size, but developers have to make that judgment call themselves.
 
@@ -167,6 +130,7 @@ The PM agent searches the codebase to count affected files and modules, then cla
 **Commands:**
 - `/sprint <feature>` — Full-lifecycle development. PM assesses scope, user confirms routing, then agents execute the appropriate workflow.
 - `/sprint-plan <feature>` — Plan only. Produces an implementation brief without writing any code.
+- `/sprint-loop <goal>` — Long-lived development session. Agents stay alive and accumulate context across iterations. User says "done" to teardown.
 
 **Agents:**
 
@@ -181,14 +145,37 @@ The PM agent searches the codebase to count affected files and modules, then cla
 
 ---
 
+### dev-tools (v0.8.2)
+
+**Problem:** Switching between editor and terminal to manage AWS services, trigger Jenkins builds, or refresh SSO credentials breaks flow and requires remembering CLI flags.
+
+**Solution:** Exposes AWS ECS, SSO, Jenkins CI, and Git operations as MCP tools that Claude can call directly in natural language.
+
+**How it works:**
+
+An MCP server provides 13 tools organized by domain. Services are discovered via AWS resource tags, Jenkins targets are configurable per environment, and all destructive operations have confirm gates (preview by default).
+
+**Tools:**
+
+| Domain | Tools | What they do |
+|--------|-------|-------------|
+| AWS ECS | `aws_ecs_list`, `aws_ecs_scale`, `aws_ecs_update_service` | List/scale/update ECS services by tag |
+| AWS SSO | `aws_sso_status`, `aws_sso_refresh` | Check SSO token expiry, refresh credentials |
+| AWS Config | `aws_configure` | View/change AWS profile and tag settings |
+| Jenkins | `jenkins_configure`, `jenkins_list_targets`, `jenkins_build`, `jenkins_status`, `jenkins_abort`, `jenkins_edit_config` | Configure, trigger, monitor, and abort CI builds |
+| Git | `git_command` | Execute git commands with safety guardrails |
+
+---
+
 ## Plugin Status
 
 | Plugin | Version | Commands | Agents | Hooks |
 |--------|---------|----------|--------|-------|
-| ask-before-code | 0.4.1 | 1 | 1 | - |
-| quick-wins | 0.3.4 | 2 | 1 | 1 (Stop) |
-| md-to-skill | 0.8.4 | 14 | 2 | 5 (Pre/Post/Stop) |
-| feature-sprint | 0.5.1 | 2 | 6 | - |
+| ask-before-code | 0.4.2 | 1 | 1 | 1 (SessionStart) |
+| quick-wins | 0.3.5 | 2 | 1 | 2 (SessionStart, Stop) |
+| md-to-skill | 0.8.7 | 3 | 1 | 1 (Stop) |
+| feature-sprint | 0.8.2 | 3 | 7 | 1 (SessionStart) |
+| dev-tools | 0.8.2 | 0 | 0 | 1 (SessionStart) |
 
 ## FlowAccount Compatibility
 

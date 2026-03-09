@@ -1,18 +1,17 @@
 # dev-tools Plugin
 
-AWS ECS tools exposed as MCP tools for Claude Code — list, scale, and manage ECS services without leaving your editor.
+AWS, Jenkins, and Git dev tools exposed as MCP tools for Claude Code — ECS management, SSO credentials, Jenkins CI builds, and Git workflow shortcuts.
 
 ## Overview
 
-The dev-tools plugin converts AWS CLI operations into MCP tools that Claude can call directly. Instead of switching to a terminal and remembering CLI flags, you can ask Claude to check service status or scale down your sandbox environment in natural language.
-
-Services are discovered via AWS resource tags (`acc-sandbox`), so you can manage entire environments with a single command.
+The dev-tools plugin converts CLI operations into MCP tools that Claude can call directly. Instead of switching to a terminal and remembering CLI flags, you can ask Claude to check service status, trigger a build, or refresh credentials in natural language.
 
 ## Prerequisites
 
-- **AWS CLI** installed and on your PATH: `aws --version`
-- **AWS profile `basic_profile`** configured in `~/.aws/credentials` or `~/.aws/config`
-- **ECS services tagged** with key `acc-sandbox` and appropriate values (e.g. `core`, `profile`, `report`, `doc`, `ui`, `my`)
+- **Node.js 18+** installed
+- **AWS CLI** installed and on your PATH (for AWS tools)
+- **AWS profile** configured in `~/.aws/credentials` or `~/.aws/config`
+- **Jenkins** accessible with API token (for Jenkins tools)
 
 ## Installation
 
@@ -36,109 +35,122 @@ claude --plugin-dir ./plugins/dev-tools
 cp -r ./plugins/dev-tools ~/.claude-plugins/
 ```
 
-### Project-Specific Installation
-
-```bash
-cp -r ./plugins/dev-tools /path/to/your/project/.claude/
-```
-
 ### Zero-Setup Note
 
-`dist/server.js` is pre-bundled — users do **not** need yarn or npm. Node.js is the only runtime requirement.
+`dist/devtool.server.js` is pre-bundled — users do **not** need yarn or npm. Node.js is the only runtime requirement.
 
 ### Verify Installation
 
 ```bash
 claude
 /mcp
-# You should see: dev-tools (with 3 tools)
+# You should see: dev-tools (with 13 tools)
 ```
 
 ## Available Tools
 
-### `aws_ecs_list`
+### AWS ECS
 
-Lists all ECS services matching a tag, grouped by cluster. Shows desired count, running count, and status for each service.
+#### `aws_ecs_list`
 
-**Input:**
+Lists all ECS services matching a tag, grouped by cluster. Shows desired count, running count, and status.
+
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `tagValue` | string | No | Tag value to filter by (default: `core,profile,report,doc,ui,my`) |
+| `tagValue` | string | No | Tag value to filter by (default: configurable) |
 
-**Example usage:**
-```
-"List all my sandbox ECS services"
-"Show ECS services tagged with core"
-"What's the current status of my ECS services?"
-```
+#### `aws_ecs_scale`
 
-**Example output:**
-```
-Fetching ECS services with tag acc-sandbox=core,profile,report,doc,ui,my...
+Scales **all** ECS services matching a tag to `desiredCount=1`. Has a confirm gate — defaults to preview mode.
 
-Cluster: sandbox-cluster
----------------------------------------------------------------------------
-| Service          | Desired | Running | Status  |
-|------------------|---------|---------|---------|
-| core-api         |    1    |    1    | ACTIVE  |
-| profile-service  |    0    |    0    | ACTIVE  |
-```
-
----
-
-### `aws_ecs_scale`
-
-Scales **all** ECS services matching a tag to `desiredCount=1`. Useful for spinning up a full sandbox environment in one step.
-
-Has a **confirm gate** — defaults to preview mode. Set `confirm=true` to actually execute.
-
-**Input:**
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `tagValue` | string | No | Tag value to filter by (default: `core,profile,report,doc,ui,my`) |
-| `confirm` | boolean | No | Set `true` to execute (default: `false` = preview only) |
+| `tagValue` | string | No | Tag value to filter |
+| `confirm` | boolean | No | Set `true` to execute (default: preview) |
 
-**Example usage:**
-```
-"Scale up all my sandbox services"
-"Show me what aws_ecs_scale would do before I confirm"
-"Scale ECS services tagged with core to 1"
-```
+#### `aws_ecs_update_service`
 
----
+Updates the desired count for a **single** ECS service. Has a confirm gate.
 
-### `aws_ecs_update_service`
-
-Updates the desired count for a **single** ECS service. Use this when you need precise control over one service rather than a bulk operation.
-
-Has a **confirm gate** — defaults to preview mode. Set `confirm=true` to actually execute.
-
-**Input:**
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `cluster` | string | Yes | ECS cluster name |
 | `service` | string | Yes | ECS service name |
-| `desiredCount` | number | Yes | New desired count (integer >= 0) |
-| `confirm` | boolean | No | Set `true` to execute (default: `false` = preview only) |
+| `desiredCount` | number | Yes | New desired count |
+| `confirm` | boolean | No | Set `true` to execute (default: preview) |
 
-**Example usage:**
-```
-"Scale the core-api service in sandbox-cluster to 2"
-"Set the report service desired count to 0 to save costs"
-"Update service profile-service in cluster sandbox-cluster to desired count 1"
-```
+---
 
-## Configuration
+### AWS SSO
 
-The tools use these hardcoded defaults (defined in source):
+#### `aws_sso_status`
 
-| Constant | Value | Description |
-|----------|-------|-------------|
-| `TAG_KEY` | `acc-sandbox` | Tag key used to identify managed ECS services |
-| `DEFAULT_TAG_VALUE` | `core,profile,report,doc,ui,my` | Default comma-separated tag values |
-| `AWS_PROFILE` | `basic_profile` | AWS CLI profile used for all ECS commands |
+Checks SSO token expiry by reading the local cache file. No API call made — fast and safe to call anytime.
 
-To target a different subset of services, pass a custom `tagValue` to any tool — e.g. `"core"` for only core services.
+#### `aws_sso_refresh`
+
+Refreshes SSO credentials. Runs `aws sso login` if expired, then exports credentials to the configured profile.
+
+---
+
+### AWS Configuration
+
+#### `aws_configure`
+
+View or change AWS profile, tag key/value settings used by the ECS tools. Persists across the session.
+
+---
+
+### Jenkins CI
+
+#### `jenkins_configure`
+
+Set Jenkins URL, user, API token, and environment (staging/preprod). Must be called before other Jenkins tools.
+
+#### `jenkins_list_targets`
+
+Show available build targets with their default parameters.
+
+#### `jenkins_build`
+
+Trigger a Jenkins build. Supports targets: ui, api, api-report, api-doc, api-profile, open-api, lambda-pdf-preview, lambda-pdf-gen.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `target` | string | Yes | Build target name |
+| `params` | object | No | Override default build parameters |
+
+#### `jenkins_status`
+
+Check build status and console output for a running or completed build.
+
+#### `jenkins_abort`
+
+Abort/cancel a running build or queued item.
+
+#### `jenkins_edit_config`
+
+Edit Jenkins job configuration XML directly.
+
+---
+
+### Git
+
+#### `git_command`
+
+Execute git commands with safety guardrails. Blocks destructive operations by default.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `command` | string | Yes | Git command to execute (without `git` prefix) |
+
+---
+
+## Typical Workflows
+
+**AWS:** `aws_sso_status` → `aws_sso_refresh` (if expired) → `aws_ecs_list` → `aws_ecs_update_service`
+
+**Jenkins:** `jenkins_configure` (set token once) → `jenkins_list_targets` → `jenkins_build` → `jenkins_status` → `jenkins_abort` (if needed)
 
 ## Development
 
@@ -146,57 +158,56 @@ To target a different subset of services, pass a custom `tagValue` to any tool �
 
 ```bash
 cd plugins/dev-tools
-yarn install
-yarn build:bundle   # bundles everything into dist/server.js
+npm install
+npm run build
 ```
-
-### Build Scripts
-
-| Script | Description |
-|--------|-------------|
-| `yarn build` | Bundle with `@modelcontextprotocol/sdk` as external dependency |
-| `yarn build:bundle` | Fully self-contained bundle — no runtime dependencies needed |
 
 ### Project Structure
 
 ```
 dev-tools/
 ├── .claude-plugin/
-│   └── plugin.json       # Plugin metadata
-├── .mcp.json             # MCP server config for local testing
+│   └── plugin.json
 ├── src/
-│   ├── main.ts           # MCP server entry point
+│   ├── main.ts
 │   └── tools/
-│       ├── index.ts               # Registers all tools
-│       ├── ecs-list.tool.ts       # aws_ecs_list
-│       ├── ecs-scale.tool.ts      # aws_ecs_scale
-│       └── ecs-update-service.tool.ts  # aws_ecs_update_service
+│       ├── index.ts
+│       ├── ecs-list.tool.ts
+│       ├── ecs-scale.tool.ts
+│       ├── ecs-update-service.tool.ts
+│       ├── sso-status.tool.ts
+│       ├── sso-refresh.tool.ts
+│       ├── set-profile.tool.ts
+│       ├── jenkins-configure.tool.ts
+│       ├── jenkins-list.tool.ts
+│       ├── jenkins-build.tool.ts
+│       ├── jenkins-status.tool.ts
+│       ├── jenkins-abort.tool.ts
+│       ├── jenkins-edit-config.tool.ts
+│       └── git-command.tool.ts
+├── hooks/
+│   └── hooks.json
 ├── dist/
-│   └── server.js         # Pre-bundled output (committed)
+│   └── devtool.server.js
 ├── package.json
-├── tsconfig.json
-└── yarn.lock
+└── tsconfig.json
 ```
 
 ## Troubleshooting
 
 **MCP server not starting:**
 - Verify Node.js 18+ is installed: `node --version`
-- Check `dist/server.js` exists and is non-empty: `ls -lh dist/server.js`
+- Check `dist/devtool.server.js` exists
 - Confirm the server appears in `/mcp` output
 
 **AWS CLI errors / no credentials:**
-- Verify `basic_profile` is configured: `aws sts get-caller-identity --profile basic_profile`
-- Check AWS credentials are not expired
+- Run `aws_sso_status` to check token expiry
+- Run `aws_sso_refresh` to refresh if expired
+- Verify profile is configured with `aws_configure`
 
-**No services found:**
-- Confirm your ECS services have the `acc-sandbox` tag set
-- Verify the `tagValue` matches your tag values exactly
-- Test the underlying query: `aws resourcegroupstaggingapi get-resources --resource-type-filters "ecs:service" --tag-filters "Key=acc-sandbox,Values=core" --output text --profile basic_profile`
-
-**Scale operation not working:**
-- Remember to set `confirm=true` — the default is preview mode
-- Check that the AWS profile has `ecs:UpdateService` permissions
+**Jenkins tools not working:**
+- Run `jenkins_configure` first to set URL, user, and token
+- Verify Jenkins is accessible from your machine
 
 ## License
 

@@ -7,7 +7,7 @@ export function registerJenkinsConfigureTool(server: McpServer): void {
   defineTool(
     server,
     'jenkins_configure',
-    'View or update Jenkins settings (url, user, token, environment). Persists to ~/.config/dev-tools/jenkins.json.',
+    'View or update Jenkins settings (url, user, token, environment). Persists to ~/.config/dev-tools/jenkins.json. Use jenkins_edit_config for target default overrides.',
     {
       url: z.string().optional().describe('Jenkins base URL'),
       user: z.string().optional().describe('Jenkins API username'),

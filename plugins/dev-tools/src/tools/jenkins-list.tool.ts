@@ -26,7 +26,8 @@ export function registerJenkinsListTool(server: McpServer): void {
         const envOverrides = config.environment === 'preprod'
           ? (PREPROD_OVERRIDES[key] || {})
           : {};
-        const defaults = { ...target.defaults, ...envOverrides };
+        const configOverrides = config.targetDefaults?.[key] || {};
+        const defaults = { ...target.defaults, ...envOverrides, ...configOverrides };
 
         if (verbose) {
           const jobPath = resolveJobPath(target, config);

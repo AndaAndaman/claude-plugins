@@ -1,0 +1,23 @@
+{
+  "last_processed_line": 643,
+  "suggested_directories": [
+    ".",
+    "plugins\\md-to-skill\\commands",
+    "plugins\\dev-tools\\src\\tools"
+  ],
+  "last_run_time": "2026-03-09T11:04:51.032748",
+  "generation_times": {
+    ".": "2026-03-09T10:10:53.979645",
+    "plugins\\md-to-skill\\commands": "2026-03-09T10:10:53.979645",
+    "plugins\\dev-tools\\src\\tools": "2026-03-09T10:54:20.884490"
+  },
+  "completion_cache": {
+    "last_scanned_line": 643,
+    "has_commit": true,
+    "has_test_success": false,
+    "has_build_success": true,
+    "has_task_complete": true,
+    "has_completion_phrase": true,
+    "last_edit_index": 608
+  }
+}

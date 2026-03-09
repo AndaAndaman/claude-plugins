@@ -10,6 +10,7 @@ import { registerJenkinsListTool } from './jenkins-list.tool.js';
 import { registerJenkinsBuildTool } from './jenkins-build.tool.js';
 import { registerJenkinsStatusTool } from './jenkins-status.tool.js';
 import { registerJenkinsAbortTool } from './jenkins-abort.tool.js';
+import { registerJenkinsEditConfigTool } from './jenkins-edit-config.tool.js';
 
 export function registerTools(server: McpServer): void {
   registerConfigureTool(server);
@@ -23,4 +24,5 @@ export function registerTools(server: McpServer): void {
   registerJenkinsBuildTool(server);
   registerJenkinsStatusTool(server);
   registerJenkinsAbortTool(server);
+  registerJenkinsEditConfigTool(server);
 }

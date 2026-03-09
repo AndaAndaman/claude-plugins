@@ -27765,6 +27765,9 @@ function saveJenkinsConfig(config2) {
   (0, import_node_fs3.mkdirSync)(CONFIG_DIR2, { recursive: true });
   (0, import_node_fs3.writeFileSync)(JENKINS_CONFIG_FILE, JSON.stringify(current2, null, 2) + "\n", "utf8");
 }
+function getJenkinsConfigPath() {
+  return JENKINS_CONFIG_FILE;
+}
 var BUILD_TARGETS = {
   ui: {
     name: "ui",
@@ -27943,7 +27946,8 @@ function triggerBuild(target, params) {
     return { success: false, error: `Unknown target: ${target}. Available: ${Object.keys(BUILD_TARGETS).join(", ")}` };
   }
   const envOverrides = config2.environment === "preprod" ? PREPROD_OVERRIDES[target] || {} : {};
-  const merged = { ...bt.defaults, ...envOverrides, ...params };
+  const configOverrides = config2.targetDefaults?.[target] || {};
+  const merged = { ...bt.defaults, ...envOverrides, ...configOverrides, ...params };
   const jobPath = resolveJobPath(bt, config2);
   const url2 = `${config2.url}/job/${jobPath}/buildWithParameters`;
   const data = Object.entries(merged).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
@@ -28033,7 +28037,7 @@ function registerJenkinsConfigureTool(server2) {
   defineTool(
     server2,
     "jenkins_configure",
-    "View or update Jenkins settings (url, user, token, environment). Persists to ~/.config/dev-tools/jenkins.json.",
+    "View or update Jenkins settings (url, user, token, environment). Persists to ~/.config/dev-tools/jenkins.json. Use jenkins_edit_config for target default overrides.",
     {
       url: external_exports4.string().optional().describe("Jenkins base URL"),
       user: external_exports4.string().optional().describe("Jenkins API username"),
@@ -28100,7 +28104,8 @@ function registerJenkinsListTool(server2) {
       ];
       for (const [key, target] of Object.entries(BUILD_TARGETS)) {
         const envOverrides = config2.environment === "preprod" ? PREPROD_OVERRIDES[key] || {} : {};
-        const defaults = { ...target.defaults, ...envOverrides };
+        const configOverrides = config2.targetDefaults?.[key] || {};
+        const defaults = { ...target.defaults, ...envOverrides, ...configOverrides };
         if (verbose) {
           const jobPath = resolveJobPath(target, config2);
           lines.push(`${key} \u2014 ${target.description} (${jobPath})`);
@@ -28151,7 +28156,8 @@ function registerJenkinsBuildTool(server2) {
       const bt = BUILD_TARGETS[target];
       const config2 = loadJenkinsConfig();
       const envOverrides = config2.environment === "preprod" ? PREPROD_OVERRIDES[target] || {} : {};
-      const merged = { ...bt.defaults, ...envOverrides, ...params };
+      const configOverrides = config2.targetDefaults?.[target] || {};
+      const merged = { ...bt.defaults, ...envOverrides, ...configOverrides, ...params };
       const showKeys = /* @__PURE__ */ new Set([...SUMMARY_KEYS2, ...Object.keys(params)]);
       const summary = Object.entries(merged).filter(([k]) => showKeys.has(k)).map(([k, v]) => `${k}=${v || '""'}`).join("  ");
       const lines = [
@@ -28240,6 +28246,82 @@ function registerJenkinsAbortTool(server2) {
   );
 }
 
+// src/tools/jenkins-edit-config.tool.ts
+function registerJenkinsEditConfigTool(server2) {
+  defineTool(
+    server2,
+    "jenkins_edit_config",
+    "View or edit Jenkins config file. Show full config, set/remove target default overrides, or reset all overrides.",
+    {
+      action: external_exports4.enum(["show", "set", "remove", "reset"]).describe(
+        "show=view full config, set=set target default override, remove=remove a target override, reset=clear all target overrides"
+      ),
+      target: external_exports4.string().optional().describe('Target name for set/remove (e.g. "api", "ui")'),
+      key: external_exports4.string().optional().describe('Param key for set/remove (e.g. "COMMIT_HASH")'),
+      value: external_exports4.string().optional().describe("Param value for set")
+    },
+    async (input) => {
+      const config2 = loadJenkinsConfig();
+      if (input.action === "show") {
+        const tok = config2.token ? config2.token.slice(0, 6) + "..." : "<not set>";
+        const lines = [
+          `Config: ${getJenkinsConfigPath()}`,
+          "",
+          `url: ${config2.url}`,
+          `user: ${config2.user}`,
+          `token: ${tok}`,
+          `environment: ${config2.environment}`
+        ];
+        const td = config2.targetDefaults;
+        if (td && Object.keys(td).length > 0) {
+          lines.push("", "Target overrides:");
+          for (const [t, o] of Object.entries(td)) {
+            for (const [k, v] of Object.entries(o)) {
+              lines.push(`  ${t}.${k} = ${v}`);
+            }
+          }
+        } else {
+          lines.push("", "Target overrides: (none)");
+        }
+        return textResult(lines.join("\n"));
+      }
+      if (input.action === "set") {
+        if (!input.target || !input.key || input.value === void 0) {
+          return textResult("Error: set requires target, key, and value.");
+        }
+        const td = config2.targetDefaults || {};
+        td[input.target] = { ...td[input.target] || {}, [input.key]: input.value };
+        saveJenkinsConfig({ targetDefaults: td });
+        return textResult(`Set ${input.target}.${input.key} = ${input.value}`);
+      }
+      if (input.action === "remove") {
+        if (!input.target) {
+          return textResult("Error: remove requires target. Optionally key to remove a single param.");
+        }
+        const td = config2.targetDefaults || {};
+        if (!td[input.target]) {
+          return textResult(`No overrides for ${input.target}.`);
+        }
+        if (input.key) {
+          delete td[input.target][input.key];
+          if (Object.keys(td[input.target]).length === 0)
+            delete td[input.target];
+          saveJenkinsConfig({ targetDefaults: td });
+          return textResult(`Removed ${input.target}.${input.key}`);
+        }
+        delete td[input.target];
+        saveJenkinsConfig({ targetDefaults: td });
+        return textResult(`Removed all overrides for ${input.target}.`);
+      }
+      if (input.action === "reset") {
+        saveJenkinsConfig({ targetDefaults: {} });
+        return textResult("All target overrides cleared.");
+      }
+      return textResult("Unknown action.");
+    }
+  );
+}
+
 // src/tools/index.ts
 function registerTools(server2) {
   registerConfigureTool(server2);
@@ -28253,6 +28335,7 @@ function registerTools(server2) {
   registerJenkinsBuildTool(server2);
   registerJenkinsStatusTool(server2);
   registerJenkinsAbortTool(server2);
+  registerJenkinsEditConfigTool(server2);
 }
 
 // src/main.ts

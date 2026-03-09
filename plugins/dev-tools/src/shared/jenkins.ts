@@ -15,6 +15,7 @@ export interface JenkinsConfig {
     api: string;
     lambda: string;
   };
+  targetDefaults?: Record<string, Record<string, string>>;
 }
 
 const STAGING_JOBS = {
@@ -291,11 +292,12 @@ export function triggerBuild(target: string, params: Record<string, string>): Tr
     return { success: false, error: `Unknown target: ${target}. Available: ${Object.keys(BUILD_TARGETS).join(', ')}` };
   }
 
-  // Merge defaults with environment overrides, then user params
+  // Merge defaults with environment overrides, config overrides, then user params
   const envOverrides = config.environment === 'preprod'
     ? (PREPROD_OVERRIDES[target] || {})
     : {};
-  const merged = { ...bt.defaults, ...envOverrides, ...params };
+  const configOverrides = config.targetDefaults?.[target] || {};
+  const merged = { ...bt.defaults, ...envOverrides, ...configOverrides, ...params };
   const jobPath = resolveJobPath(bt, config);
   const url = `${config.url}/job/${jobPath}/buildWithParameters`;
 

@@ -37,7 +37,8 @@ export function registerJenkinsBuildTool(server: McpServer): void {
       const envOverrides = config.environment === 'preprod'
         ? (PREPROD_OVERRIDES[target] || {})
         : {};
-      const merged = { ...bt.defaults, ...envOverrides, ...params };
+      const configOverrides = config.targetDefaults?.[target] || {};
+      const merged = { ...bt.defaults, ...envOverrides, ...configOverrides, ...params };
 
       // Compact summary: only key params + any user overrides
       const showKeys = new Set([...SUMMARY_KEYS, ...Object.keys(params)]);

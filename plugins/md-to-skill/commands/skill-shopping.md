@@ -76,7 +76,6 @@ Determine the plugin source for each skill based on path or frontmatter:
 - Path contains `md-to-skill` or skill relates to learning/instincts → `md-to-skill`
 - Path contains `quick-wins` or skill relates to code quality/refactoring → `quick-wins`
 - Path contains `ask-before-code` or skill relates to requirements/clarity → `ask-before-code`
-- Path contains `local-memory` or skill relates to context/memory → `local-memory`
 - Otherwise → `custom`
 
 ### Step 5: Display Results

@@ -24,5 +24,4 @@ node_modules/
 !/CLAUDE.md
 nul
 .claude/settings.local.json
-.claude/local-memory-**
 .claude/md-to-skill-**

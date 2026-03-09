@@ -12,7 +12,6 @@ A plugin marketplace for Claude Code with development tools designed for FlowAcc
 /plugin install ask-before-code@flowaccount-dev-tools
 /plugin install quick-wins@flowaccount-dev-tools
 /plugin install md-to-skill@flowaccount-dev-tools
-/plugin install local-memory@flowaccount-dev-tools
 /plugin install feature-sprint@flowaccount-dev-tools
 ```
 
@@ -147,34 +146,6 @@ Instincts are lightweight learned patterns with confidence scores. They start at
 
 ---
 
-### local-memory (v0.5.2)
-
-**Problem:** Claude Code loses context about your project structure between sessions. Every new conversation starts without understanding what each directory contains, what patterns exist, or how modules relate to each other.
-
-**Solution:** Automatically generates CLAUDE.md breadcrumb files in subdirectories that describe the module's purpose, files, patterns, and dependencies. These load into Claude's context at session start, giving it immediate understanding of the codebase.
-
-**How it works:**
-
-A Stop hook detects which directories had file changes during the session. It then triggers an MCP-based pipeline: analyze directory contents, generate a context summary, and write/merge it into a CLAUDE.md file. The merge is smart — it preserves any manually written sections while updating the auto-generated blocks.
-
-**Commands:**
-- `/build-context [directory]` — Manually trigger context generation for a specific directory or current directory.
-
-**MCP tools (used internally by the context-builder agent):**
-- `analyze_directory` — Scan directory structure and file contents
-- `generate_context` — Produce structured context summary
-- `write_context` — Write or merge CLAUDE.md with existing content
-- `list_context_files` — List all generated context files
-
-**Components:**
-| Component | Role |
-|-----------|------|
-| context-builder agent | Orchestrates MCP tools for context generation |
-| Stop hook | Detects file changes and triggers context builds |
-| directory-summarization skill | Guides how to document module structure |
-
----
-
 ### feature-sprint (v0.5.1)
 
 **Problem:** Feature implementation either gets under-planned (jump in, hit issues, rework) or over-planned (spend hours on architecture documents nobody reads). The right amount of planning depends on the feature's size, but developers have to make that judgment call themselves.
@@ -217,7 +188,6 @@ The PM agent searches the codebase to count affected files and modules, then cla
 | ask-before-code | 0.4.1 | 1 | 1 | - |
 | quick-wins | 0.3.4 | 2 | 1 | 1 (Stop) |
 | md-to-skill | 0.8.4 | 14 | 2 | 5 (Pre/Post/Stop) |
-| local-memory | 0.5.2 | 1 | 1 | 1 (Stop) |
 | feature-sprint | 0.5.1 | 2 | 6 | - |
 
 ## FlowAccount Compatibility

@@ -29,9 +29,6 @@
     "automation",
     "knowledge-management",
     "mcp",
-    "context",
-    "documentation",
-    "memory",
     "hooks"
   ],
   "plugins": [
@@ -60,16 +57,6 @@
       "version": "0.8.5",
       "description": "Continuous learning engine for Claude Code. Observes coding patterns, builds instincts from repeated behaviors, and evolves validated instincts into reusable skills. Also converts markdown into organized Claude skills.",
       "source": "./plugins/md-to-skill",
-      "author": {
-        "name": "FlowAccount Developer",
-        "email": "dev@flowaccount.com"
-      }
-    },
-    {
-      "name": "local-memory",
-      "version": "0.5.3",
-      "description": "Automatically builds subdirectory CLAUDE.md context breadcrumbs using hybrid Hook + MCP architecture. Preserves module knowledge between sessions.",
-      "source": "./plugins/local-memory",
       "author": {
         "name": "FlowAccount Developer",
         "email": "dev@flowaccount.com"

@@ -10,7 +10,7 @@ allowed-tools:
 
 # Instinct Export Context Command
 
-Export auto-approved instincts as a readable markdown file that can be discovered by local-memory or used as project documentation.
+Export auto-approved instincts as a readable markdown file for project documentation.
 
 ## Execution Workflow
 
@@ -96,7 +96,6 @@ Write the generated markdown to `.claude/learned-patterns.md`.
 
 This file is:
 - Safe and non-destructive (standalone file, not modifying CLAUDE.md)
-- Discoverable by local-memory plugin for context generation
 - Human-readable for direct reference
 
 Show summary:
@@ -110,7 +109,6 @@ Domains:
 - {domain}: {count} patterns
 - {domain}: {count} patterns
 
-This file can be discovered by local-memory for project context.
 Run /instinct-export-context again to refresh after new instincts are approved.
 ```
 

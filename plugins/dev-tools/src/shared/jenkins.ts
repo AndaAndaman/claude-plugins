@@ -27,7 +27,7 @@ const STAGING_JOBS = {
 const PREPROD_JOBS = {
   ui: 'preprod/job/workspace/job/frontend',
   api: 'preprod/job/dotnet/job/dotnet.arm64',
-  lambda: 'preprod/job/workspace/job/lambda',
+  lambda: 'preprod/job/workspace/job/serverless',
 };
 
 const CONFIG_DIR = join(homedir(), '.config', 'dev-tools');
@@ -182,12 +182,11 @@ export const BUILD_TARGETS: Record<string, BuildTarget> = {
     name: 'lambda-pdf-preview',
     description: 'Lambda PDF Preview',
     jobPathKey: 'lambda',
-    jobPathOverride: '{env}/job/workspace/job/lambda-pdf-preview-build',
     defaults: {
       BranchName: 'main',
       lambda: 'lambda.pdf-preview',
       configuration: 'staging',
-      AliasesName: 'staging-ac',
+      YarnBool: 'Yes',
     },
   },
   'lambda-pdf-gen': {
@@ -211,7 +210,7 @@ export const PREPROD_OVERRIDES: Record<string, Record<string, string>> = {
   'api-doc':       { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },
   'api-profile':   { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },
   'open-api':      { COMMIT_HASH: 'canary-preprod', STAGE: 'preprod-ns' },
-  'lambda-pdf-preview': { configuration: 'preprod', AliasesName: 'preprod-ac' },
+  'lambda-pdf-preview': { BranchName: 'a-preprod', configuration: 'preprod' },
   'lambda-pdf-gen':     { BranchName: 'a-preprod', configuration: 'preprod' },
 };
 

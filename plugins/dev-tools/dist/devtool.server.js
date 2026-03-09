@@ -27726,7 +27726,7 @@ var STAGING_JOBS = {
 var PREPROD_JOBS = {
   ui: "preprod/job/workspace/job/frontend",
   api: "preprod/job/dotnet/job/dotnet.arm64",
-  lambda: "preprod/job/workspace/job/lambda"
+  lambda: "preprod/job/workspace/job/serverless"
 };
 var CONFIG_DIR2 = (0, import_node_path3.join)((0, import_node_os3.homedir)(), ".config", "dev-tools");
 var JENKINS_CONFIG_FILE = (0, import_node_path3.join)(CONFIG_DIR2, "jenkins.json");
@@ -27861,12 +27861,11 @@ var BUILD_TARGETS = {
     name: "lambda-pdf-preview",
     description: "Lambda PDF Preview",
     jobPathKey: "lambda",
-    jobPathOverride: "{env}/job/workspace/job/lambda-pdf-preview-build",
     defaults: {
       BranchName: "main",
       lambda: "lambda.pdf-preview",
       configuration: "staging",
-      AliasesName: "staging-ac"
+      YarnBool: "Yes"
     }
   },
   "lambda-pdf-gen": {
@@ -27888,7 +27887,7 @@ var PREPROD_OVERRIDES = {
   "api-doc": { COMMIT_HASH: "canary-preprod", BUILD_SITE: "ac", STAGE: "preprod" },
   "api-profile": { COMMIT_HASH: "canary-preprod", BUILD_SITE: "ac", STAGE: "preprod" },
   "open-api": { COMMIT_HASH: "canary-preprod", STAGE: "preprod-ns" },
-  "lambda-pdf-preview": { configuration: "preprod", AliasesName: "preprod-ac" },
+  "lambda-pdf-preview": { BranchName: "a-preprod", configuration: "preprod" },
   "lambda-pdf-gen": { BranchName: "a-preprod", configuration: "preprod" }
 };
 function resolveJobPath(target, config2) {

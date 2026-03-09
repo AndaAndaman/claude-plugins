@@ -27756,14 +27756,14 @@ function loadJenkinsConfig() {
   return cached2;
 }
 function saveJenkinsConfig(config2) {
-  const current2 = loadJenkinsConfig();
-  Object.assign(current2, config2);
+  const current3 = loadJenkinsConfig();
+  Object.assign(current3, config2);
   if (config2.environment) {
-    current2.jobPaths = config2.environment === "preprod" ? { ...PREPROD_JOBS } : { ...STAGING_JOBS };
+    current3.jobPaths = config2.environment === "preprod" ? { ...PREPROD_JOBS } : { ...STAGING_JOBS };
   }
-  cached2 = current2;
+  cached2 = current3;
   (0, import_node_fs3.mkdirSync)(CONFIG_DIR2, { recursive: true });
-  (0, import_node_fs3.writeFileSync)(JENKINS_CONFIG_FILE, JSON.stringify(current2, null, 2) + "\n", "utf8");
+  (0, import_node_fs3.writeFileSync)(JENKINS_CONFIG_FILE, JSON.stringify(current3, null, 2) + "\n", "utf8");
 }
 function getJenkinsConfigPath() {
   return JENKINS_CONFIG_FILE;
@@ -28396,9 +28396,9 @@ function rebase(base) {
     return `Error: uncommitted changes. Commit or stash first.
 ${status}`;
   const lines = [`Rebasing ${branch} onto origin/${base}`];
-  const fetch = git("fetch", "origin", base);
-  if (!fetch.ok)
-    return `Error fetching origin/${base}: ${fetch.stderr}`;
+  const fetch2 = git("fetch", "origin", base);
+  if (!fetch2.ok)
+    return `Error fetching origin/${base}: ${fetch2.stderr}`;
   lines.push(`Fetched origin/${base}`);
   const result = git("rebase", `origin/${base}`);
   if (!result.ok) {
@@ -28480,6 +28480,224 @@ function registerGitCommandTool(server2) {
   );
 }
 
+// src/shared/healthcheck.ts
+var import_node_fs4 = require("node:fs");
+var import_node_path4 = require("node:path");
+var import_node_os4 = require("node:os");
+var DEFAULT_ENDPOINTS = [
+  { name: "open-api", url: "https://open-api-sandbox.dev.flowaccount.com/healthcheck" },
+  { name: "api-core", url: "https://api-core-acc.dev.flowaccount.com/api/healthcheck" },
+  { name: "report-prod", url: "https://report-api-ac.flowaccount.com/api/healthcheck" },
+  { name: "report-dev", url: "https://report-api-acc.dev.flowaccount.com/api/healthcheck" },
+  { name: "doc-api", url: "https://doc-api-acc.dev.flowaccount.com/api/healthcheck" },
+  { name: "ui", url: "https://ui-acc.dev.flowaccount.com/healthcheck" }
+];
+var CONFIG_DIR3 = (0, import_node_path4.join)((0, import_node_os4.homedir)(), ".config", "dev-tools");
+var CONFIG_FILE2 = (0, import_node_path4.join)(CONFIG_DIR3, "healthcheck.json");
+var current2 = null;
+function load2() {
+  if (current2)
+    return current2;
+  try {
+    const raw = (0, import_node_fs4.readFileSync)(CONFIG_FILE2, "utf8");
+    current2 = JSON.parse(raw);
+  } catch {
+    current2 = { endpoints: [...DEFAULT_ENDPOINTS] };
+  }
+  return current2;
+}
+function save2() {
+  const config2 = load2();
+  (0, import_node_fs4.mkdirSync)(CONFIG_DIR3, { recursive: true });
+  (0, import_node_fs4.writeFileSync)(CONFIG_FILE2, JSON.stringify(config2, null, 2) + "\n", "utf8");
+}
+function getEndpoints() {
+  return [...load2().endpoints];
+}
+function getEndpoint(name) {
+  return load2().endpoints.find((e) => e.name === name);
+}
+function addEndpoint(ep) {
+  const config2 = load2();
+  if (config2.endpoints.some((e) => e.name === ep.name)) {
+    throw new Error(`Endpoint "${ep.name}" already exists. Use edit to update.`);
+  }
+  config2.endpoints.push(ep);
+  save2();
+}
+function editEndpoint(name, updates) {
+  const config2 = load2();
+  const idx = config2.endpoints.findIndex((e) => e.name === name);
+  if (idx === -1)
+    throw new Error(`Endpoint "${name}" not found.`);
+  config2.endpoints[idx] = { ...config2.endpoints[idx], ...updates };
+  save2();
+}
+function removeEndpoint(name) {
+  const config2 = load2();
+  const idx = config2.endpoints.findIndex((e) => e.name === name);
+  if (idx === -1)
+    throw new Error(`Endpoint "${name}" not found.`);
+  config2.endpoints.splice(idx, 1);
+  save2();
+}
+function getHealthcheckConfigPath() {
+  return CONFIG_FILE2;
+}
+
+// src/tools/healthcheck.tool.ts
+async function fetchWithTimeout(url2, method, timeoutMs, headers) {
+  const start = Date.now();
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url2, {
+      method,
+      signal: controller.signal,
+      headers: headers || {}
+    });
+    const body = await res.text().catch(() => "");
+    return { status: res.status, ok: res.ok, durationMs: Date.now() - start, body };
+  } catch (err) {
+    const msg = controller.signal.aborted ? `Timeout after ${timeoutMs}ms` : String(err.message || err);
+    return { status: 0, ok: false, durationMs: Date.now() - start, error: msg };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+function formatBody(body) {
+  if (!body)
+    return "";
+  try {
+    const json2 = JSON.parse(body);
+    const fields = [];
+    for (const key of ["gitHash", "git_hash", "commitHash", "commit", "version", "buildTime", "build_time", "buildDate", "build_date", "timestamp", "env", "environment"]) {
+      if (json2[key] !== void 0)
+        fields.push(`${key}: ${json2[key]}`);
+    }
+    if (fields.length === 0) {
+      const compact = JSON.stringify(json2);
+      return compact.length > 200 ? compact.slice(0, 200) + "..." : compact;
+    }
+    return fields.join(", ");
+  } catch {
+    const trimmed = body.trim();
+    return trimmed.length > 200 ? trimmed.slice(0, 200) + "..." : trimmed;
+  }
+}
+function registerHealthcheckTool(server2) {
+  defineTool(
+    server2,
+    "healthcheck",
+    "Check health of configured endpoints, or manage the endpoint list (add/edit/remove/list).",
+    {
+      action: external_exports4.enum(["check", "list", "add", "edit", "remove"]).describe("check=run healthchecks, list=show endpoints, add/edit/remove=manage endpoints"),
+      name: external_exports4.string().optional().describe("Endpoint name (required for add/edit/remove, optional for check to target one)"),
+      url: external_exports4.string().optional().describe("Endpoint URL (required for add, optional for edit)"),
+      method: external_exports4.enum(["GET", "HEAD"]).optional().describe("HTTP method (default GET)"),
+      expected_status: external_exports4.number().optional().describe("Expected HTTP status code (default 200)"),
+      timeout_ms: external_exports4.number().optional().describe("Request timeout in ms (default 5000)"),
+      headers: external_exports4.string().optional().describe('JSON string of headers, e.g. {"Authorization":"Bearer xxx"}')
+    },
+    async (input) => {
+      const action = input.action;
+      if (action === "list") {
+        const eps = getEndpoints();
+        if (eps.length === 0) {
+          return textResult(`No healthcheck endpoints configured.
+Config: ${getHealthcheckConfigPath()}`);
+        }
+        const lines = eps.map(
+          (e) => `  ${e.name}: ${e.method || "GET"} ${e.url} (expect ${e.expectedStatus || 200}, timeout ${e.timeoutMs || 5e3}ms)`
+        );
+        return textResult(`Healthcheck endpoints (${eps.length}):
+${lines.join("\n")}
+
+Config: ${getHealthcheckConfigPath()}`);
+      }
+      if (action === "add") {
+        if (!input.name || !input.url)
+          return errorResult("Error: add requires name and url.");
+        try {
+          const headers = input.headers ? JSON.parse(input.headers) : void 0;
+          addEndpoint({
+            name: input.name,
+            url: input.url,
+            method: input.method || void 0,
+            expectedStatus: input.expected_status,
+            timeoutMs: input.timeout_ms,
+            headers
+          });
+          return textResult(`Added endpoint "${input.name}": ${input.method || "GET"} ${input.url}`);
+        } catch (err) {
+          return errorResult(err.message);
+        }
+      }
+      if (action === "edit") {
+        if (!input.name)
+          return errorResult("Error: edit requires name.");
+        try {
+          const updates = {};
+          if (input.url !== void 0)
+            updates.url = input.url;
+          if (input.method !== void 0)
+            updates.method = input.method;
+          if (input.expected_status !== void 0)
+            updates.expectedStatus = input.expected_status;
+          if (input.timeout_ms !== void 0)
+            updates.timeoutMs = input.timeout_ms;
+          if (input.headers !== void 0)
+            updates.headers = JSON.parse(input.headers);
+          if (Object.keys(updates).length === 0)
+            return errorResult("Error: no fields to update.");
+          editEndpoint(input.name, updates);
+          return textResult(`Updated endpoint "${input.name}".`);
+        } catch (err) {
+          return errorResult(err.message);
+        }
+      }
+      if (action === "remove") {
+        if (!input.name)
+          return errorResult("Error: remove requires name.");
+        try {
+          removeEndpoint(input.name);
+          return textResult(`Removed endpoint "${input.name}".`);
+        } catch (err) {
+          return errorResult(err.message);
+        }
+      }
+      if (action === "check") {
+        const eps = input.name ? [getEndpoint(input.name)].filter(Boolean) : getEndpoints();
+        if (eps.length === 0) {
+          return input.name ? errorResult(`Endpoint "${input.name}" not found.`) : errorResult("No endpoints configured. Use action=add to add one.");
+        }
+        const results = await Promise.all(
+          eps.map(async (ep) => {
+            const method = ep.method || "GET";
+            const expectedStatus = ep.expectedStatus || 200;
+            const timeoutMs = ep.timeoutMs || 5e3;
+            const r = await fetchWithTimeout(ep.url, method, timeoutMs, ep.headers);
+            const pass = !r.error && r.status === expectedStatus;
+            const icon = pass ? "OK" : "FAIL";
+            const status = r.error ? r.error : `${r.status} (${r.durationMs}ms)`;
+            const body = pass ? formatBody(r.body) : "";
+            const line = body ? `  [${icon}] ${ep.name}: ${status}
+         ${body}` : `  [${icon}] ${ep.name}: ${status}`;
+            return line;
+          })
+        );
+        const total = results.length;
+        const failed = results.filter((r) => r.includes("[FAIL]")).length;
+        const summary = failed === 0 ? `All ${total} endpoints healthy.` : `${failed}/${total} endpoints failing.`;
+        return textResult(`${summary}
+
+${results.join("\n")}`);
+      }
+      return errorResult("Unknown action.");
+    }
+  );
+}
+
 // src/tools/index.ts
 function registerTools(server2) {
   registerConfigureTool(server2);
@@ -28495,6 +28713,7 @@ function registerTools(server2) {
   registerJenkinsAbortTool(server2);
   registerJenkinsEditConfigTool(server2);
   registerGitCommandTool(server2);
+  registerHealthcheckTool(server2);
 }
 
 // src/main.ts

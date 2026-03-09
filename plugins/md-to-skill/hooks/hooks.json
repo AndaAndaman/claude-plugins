@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/instinct-suggest_pretooluse.py\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/instinct-suggest_pretooluse.js\"",
             "timeout": 3000
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/md-watch_stop.py\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/md-watch_stop.js\"",
             "timeout": 10000
           }
         ]
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/skill_posttooluse.py\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/skill_posttooluse.js\"",
             "timeout": 5000
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/observe_posttooluse.py\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/observe_posttooluse.js\"",
             "timeout": 3000
           }
         ]
@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/structural_posttooluse.py\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/structural_posttooluse.js\"",
             "timeout": 3000
           }
         ]

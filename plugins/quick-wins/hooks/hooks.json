@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start-quick-wins.py\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start-quick-wins.js\"",
             "timeout": 5
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python \"${CLAUDE_PLUGIN_ROOT}/hooks/quick-wins_stop.py\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/quick-wins_stop.js\"",
             "timeout": 10
           }
         ]

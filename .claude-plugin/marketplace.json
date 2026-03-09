@@ -34,7 +34,7 @@
   "plugins": [
     {
       "name": "ask-before-code",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "description": "Encourages clarity before coding to prevent wasted work. Ask 3 questions now, save 3 hours later.",
       "source": "./plugins/ask-before-code",
       "author": {
@@ -44,7 +44,7 @@
     },
     {
       "name": "quick-wins",
-      "version": "0.3.4",
+      "version": "0.3.5",
       "description": "Identifies and guides easy code improvements. Small improvements, big impact.",
       "source": "./plugins/quick-wins",
       "author": {
@@ -54,7 +54,7 @@
     },
     {
       "name": "md-to-skill",
-      "version": "0.8.5",
+      "version": "0.8.6",
       "description": "Continuous learning engine for Claude Code. Observes coding patterns, builds instincts from repeated behaviors, and evolves validated instincts into reusable skills. Also converts markdown into organized Claude skills.",
       "source": "./plugins/md-to-skill",
       "author": {
@@ -64,7 +64,7 @@
     },
     {
       "name": "feature-sprint",
-      "version": "0.8.1",
+      "version": "0.8.2",
       "description": "Scope-driven feature development. /sprint for one-shot features. /sprint-loop for long-lived sessions with dynamic agent scaling (spawn on demand, message-driven, idle = free).",
       "source": "./plugins/feature-sprint",
       "author": {
@@ -74,7 +74,7 @@
     },
     {
       "name": "dev-tools",
-      "version": "0.8.1",
+      "version": "0.8.2",
       "description": "AWS, Jenkins, and Git dev tools exposed as MCP tools — ECS management, SSO credentials, Jenkins CI builds, and Git workflow shortcuts.",
       "source": "./plugins/dev-tools",
       "author": {

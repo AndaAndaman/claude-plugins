@@ -1,57 +1,13 @@
 {
-  "description": "md-to-skill hooks - continuous learning observation, skill usage tracking, markdown detection, and instinct suggestions",
+  "description": "md-to-skill hooks - markdown detection",
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Write|Edit|Bash|Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/instinct-suggest_pretooluse.js\"",
-            "timeout": 3000
-          }
-        ]
-      }
-    ],
-    "Stop": [
+"Stop": [
       {
         "hooks": [
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/md-watch_stop.js\"",
             "timeout": 10000
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Skill",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/skill_posttooluse.js\"",
-            "timeout": 5000
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|Bash|Read",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/observe_posttooluse.js\"",
-            "timeout": 3000
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/structural_posttooluse.js\"",
-            "timeout": 3000
           }
         ]
       }

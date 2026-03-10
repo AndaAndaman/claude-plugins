@@ -1,6 +1,6 @@
 # dev-tools Plugin
 
-AWS, Jenkins, and Git dev tools exposed as MCP tools for Claude Code — ECS management, SSO credentials, Jenkins CI builds, and Git workflow shortcuts.
+AWS, Jenkins, and Git dev tools exposed as MCP tools for Claude Code — ECS management, SSO credentials, Jenkins CI builds, Git workflow shortcuts, and deployment commands.
 
 ## Overview
 
@@ -44,8 +44,42 @@ cp -r ./plugins/dev-tools ~/.claude-plugins/
 ```bash
 claude
 /mcp
-# You should see: dev-tools (with 13 tools)
+# You should see: dev-tools (with 14 tools)
 ```
+
+## Commands
+
+### `/deploy [target] [environment]`
+
+Ship current branch to staging or preprod — merge to the environment branch and trigger a Jenkins build in one step.
+
+```bash
+/deploy                      # Interactive — asks target + environment
+/deploy ui staging           # Merge to a-staging, build UI
+/deploy api preprod          # Merge to canary-preprod, build API
+```
+
+**What it does:** verify clean tree → merge to env branch → trigger build → monitor status.
+
+### `/build [target] [environment]`
+
+Trigger a Jenkins build without any git operations. Use when the branch is already merged and you just need to rebuild.
+
+```bash
+/build                       # Interactive — asks target + environment
+/build ui                    # Build UI on staging (default)
+/build api preprod           # Build API on preprod
+```
+
+## Branch Conventions
+
+The target branch to merge into depends on the build target:
+
+| Target | Staging branch | Preprod branch |
+|---|---|---|
+| `ui` | `a-staging` | `a-preprod` |
+| `api`, `api-report`, `api-doc`, `api-profile`, `open-api` | `canary-staging` | `canary-preprod` |
+| `lambda-pdf-preview`, `lambda-pdf-gen` | `a-staging` | `a-preprod` |
 
 ## Available Tools
 
@@ -113,11 +147,12 @@ Show available build targets with their default parameters.
 
 #### `jenkins_build`
 
-Trigger a Jenkins build. Supports targets: ui, api, api-report, api-doc, api-profile, open-api, lambda-pdf-preview, lambda-pdf-gen.
+Trigger a Jenkins build.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `target` | string | Yes | Build target name |
+| `target` | string | Yes | Build target: ui, api, api-report, api-doc, api-profile, open-api, lambda-pdf-preview, lambda-pdf-gen |
+| `environment` | string | No | `staging` (default) or `preprod` |
 | `params` | object | No | Override default build parameters |
 
 #### `jenkins_status`
@@ -130,7 +165,7 @@ Abort/cancel a running build or queued item.
 
 #### `jenkins_edit_config`
 
-Edit Jenkins job configuration XML directly.
+View, set, remove, or reset per-target default parameter overrides.
 
 ---
 
@@ -138,19 +173,51 @@ Edit Jenkins job configuration XML directly.
 
 #### `git_command`
 
-Execute git commands with safety guardrails. Blocks destructive operations by default.
+Git workflow shortcuts with safety guardrails.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `command` | string | Yes | Git command to execute (without `git` prefix) |
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| `merge_to` | `target` (required) | Merge current branch → target branch, push, return |
+| `pull_rebase` | — | Pull with rebase |
+| `rebase` | `target` (default: main) | Rebase current branch onto target |
+| `cherry_pick` | `commit` (required) | Cherry-pick a commit |
+| `branch_cleanup` | — | Delete all merged branches |
+
+---
+
+### Healthcheck
+
+#### `healthcheck`
+
+Check health of configured endpoints, or manage the endpoint list.
+
+| Action | Description |
+|--------|-------------|
+| `check` | Run health checks on all configured endpoints |
+| `list` | Show configured endpoints |
+| `add` | Add a new endpoint |
+| `edit` | Edit an existing endpoint |
+| `remove` | Remove an endpoint |
 
 ---
 
 ## Typical Workflows
 
+**Deploy to staging:**
+```
+/deploy ui staging
+```
+
+**Build only (no merge):**
+```
+/build api preprod
+```
+
 **AWS:** `aws_sso_status` → `aws_sso_refresh` (if expired) → `aws_ecs_list` → `aws_ecs_update_service`
 
-**Jenkins:** `jenkins_configure` (set token once) → `jenkins_list_targets` → `jenkins_build` → `jenkins_status` → `jenkins_abort` (if needed)
+**Jenkins manual:** `jenkins_configure` (set token once) → `jenkins_list_targets` → `jenkins_build` → `jenkins_status` → `jenkins_abort` (if needed)
+
+**Git:** `git_command action=merge_to target="a-staging"` → `git_command action=pull_rebase`
 
 ## Development
 
@@ -168,8 +235,23 @@ npm run build
 dev-tools/
 ├── .claude-plugin/
 │   └── plugin.json
+├── commands/
+│   ├── deploy.md              # /deploy command
+│   └── build.md               # /build command
+├── skills/
+│   └── ship-and-build/
+│       └── SKILL.md           # Branch conventions + workflow guide
+├── hooks/
+│   └── hooks.json             # SessionStart hook
 ├── src/
 │   ├── main.ts
+│   ├── shared/
+│   │   ├── aws.ts
+│   │   ├── config.ts
+│   │   ├── healthcheck.ts
+│   │   ├── jenkins.ts
+│   │   ├── mcp-helpers.ts
+│   │   └── sso.ts
 │   └── tools/
 │       ├── index.ts
 │       ├── ecs-list.tool.ts
@@ -184,9 +266,8 @@ dev-tools/
 │       ├── jenkins-status.tool.ts
 │       ├── jenkins-abort.tool.ts
 │       ├── jenkins-edit-config.tool.ts
-│       └── git-command.tool.ts
-├── hooks/
-│   └── hooks.json
+│       ├── git-command.tool.ts
+│       └── healthcheck.tool.ts
 ├── dist/
 │   └── devtool.server.js
 ├── package.json
@@ -208,6 +289,10 @@ dev-tools/
 **Jenkins tools not working:**
 - Run `jenkins_configure` first to set URL, user, and token
 - Verify Jenkins is accessible from your machine
+
+**Build fails with HTTP 500:**
+- Check `jenkins_status` for console output
+- Verify target params match actual Jenkins job (see `jenkins_list_targets`)
 
 ## License
 

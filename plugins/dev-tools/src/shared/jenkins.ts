@@ -183,7 +183,7 @@ export const BUILD_TARGETS: Record<string, BuildTarget> = {
     description: 'Lambda PDF Preview',
     jobPathKey: 'lambda',
     defaults: {
-      BranchName: 'main',
+      BranchName: 'a-staging',
       lambda: 'lambda.pdf-preview',
       configuration: 'staging',
       YarnBool: 'Yes',

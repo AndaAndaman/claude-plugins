@@ -13,6 +13,24 @@ allowed-tools:
 
 Trigger a Jenkins build. No git merge, no branch switching — just build.
 
+Read the ship-and-build skill for target details and environment parameters:
+- `skills/ship-and-build/SKILL.md`
+
+## Build Targets & Environment Parameters
+
+Each target builds a specific service. The plugin auto-applies correct params per environment.
+
+| Target | Description | Staging branch/key param | Preprod overrides |
+|---|---|---|---|
+| `ui` | UI/Frontend | BUILD_BRANCH=a-staging, BUILD_SITE=acc | BUILD_BRANCH=a-preprod, BUILD_SITE=a |
+| `api` | API Core | COMMIT_HASH=canary-staging, BUILD_SITE=acc, STAGE=sandbox | COMMIT_HASH=canary-preprod, BUILD_SITE=ac, STAGE=preprod |
+| `api-report` | Report API | COMMIT_HASH=canary-staging, BUILD_SITE=acc, STAGE=sandbox | COMMIT_HASH=canary-preprod, BUILD_SITE=ac, STAGE=preprod |
+| `api-doc` | Document API | COMMIT_HASH=canary-staging, BUILD_SITE=acc, STAGE=sandbox | COMMIT_HASH=canary-preprod, BUILD_SITE=ac, STAGE=preprod |
+| `api-profile` | Profile API | COMMIT_HASH=canary-staging, BUILD_SITE=acc, STAGE=sandbox | COMMIT_HASH=canary-preprod, BUILD_SITE=ac, STAGE=preprod |
+| `open-api` | Open API | COMMIT_HASH=canary-staging, NS=-ns, STAGE=sandbox-ns | COMMIT_HASH=canary-preprod, STAGE=preprod-ns |
+| `lambda-pdf-preview` | PDF Preview | BranchName=a-staging, configuration=staging | BranchName=a-preprod, configuration=preprod |
+| `lambda-pdf-gen` | PDF Generator | BranchName=a-staging, configuration=staging | BranchName=a-preprod, configuration=preprod |
+
 ## Process
 
 ### 1. Parse arguments
@@ -69,7 +87,7 @@ Build triggered:
 
 ```bash
 /build                       # Interactive — asks target + environment
-/build ui                    # Build UI on current environment (staging default)
+/build ui                    # Build UI on staging (default)
 /build api preprod           # Build API on preprod
 /build lambda-pdf-gen staging   # Build lambda on staging
 ```

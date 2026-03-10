@@ -69,7 +69,15 @@ If dirty:
 - If stash: `git stash`, continue (remind to pop later)
 - If abort: stop
 
-### 4. Merge to environment branch
+### 4. Push current branch to origin
+
+Before merging, push the current branch so origin is up to date:
+
+```bash
+git push -u origin HEAD
+```
+
+### 5. Merge to environment branch
 
 ```
 git_command action="merge_to" target="<resolved-branch>"
@@ -80,7 +88,7 @@ If conflict:
 - Suggest: "Resolve conflicts manually, then run `/deploy` again"
 - Stop
 
-### 5. Trigger build
+### 6. Trigger build
 
 ```
 jenkins_build target="<target>" environment="<environment>"
@@ -88,13 +96,13 @@ jenkins_build target="<target>" environment="<environment>"
 
 If environment is staging, `environment` param can be omitted.
 
-### 6. Monitor
+### 7. Monitor
 
 ```
 jenkins_status target="<target>"
 ```
 
-### 7. Report
+### 8. Report
 
 ```
 Deploy summary:

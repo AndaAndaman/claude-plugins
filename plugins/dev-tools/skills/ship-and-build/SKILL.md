@@ -65,7 +65,15 @@ Ask the user if not specified:
 - **Environment**: staging or preprod?
 - **Build target**: which service? (see table above)
 
-### Step 3: Merge to environment branch
+### Step 3: Push current branch to origin
+
+Before merging, push the current branch so origin is up to date:
+
+```bash
+git push -u origin HEAD
+```
+
+### Step 4: Merge to environment branch
 
 Use the git_command MCP tool with the correct branch from the Branch Conventions table:
 
@@ -88,7 +96,7 @@ This will:
 - `git_command` will abort and return an error
 - Fall back to manual resolution: inform the user, let them resolve conflicts, then retry
 
-### Step 4: Trigger Jenkins build
+### Step 5: Trigger Jenkins build
 
 ```
 jenkins_build target="<target>" environment="<environment>"
@@ -99,7 +107,7 @@ jenkins_build target="<target>" environment="<environment>"
 
 The plugin automatically applies correct parameters per environment (PREPROD_OVERRIDES). No need to specify individual params.
 
-### Step 5: Monitor build
+### Step 6: Monitor build
 
 ```
 jenkins_status target="<target>"

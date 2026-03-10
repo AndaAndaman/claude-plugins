@@ -27774,12 +27774,12 @@ var BUILD_TARGETS = {
     description: "UI/Frontend service",
     jobPathKey: "ui",
     defaults: {
-      COMMIT_HASH: "a-staging",
-      SITE: "acc",
-      SERVICE_NAME: "ui",
-      FORCE_YARN: "false",
-      SOURCE_MAP_ENABLE: "false",
-      NX_RESET: "false"
+      BUILD_BRANCH: "a-staging",
+      BUILD_SITE: "acc",
+      app_name: "ui",
+      SERVICE_NAME: "new-ui",
+      FORCE_YARN: "yes",
+      SOURCE_MAP_ENABLE: "false"
     }
   },
   api: {
@@ -27881,7 +27881,7 @@ var BUILD_TARGETS = {
   }
 };
 var PREPROD_OVERRIDES = {
-  ui: { COMMIT_HASH: "a-preprod", SITE: "ac" },
+  ui: { BUILD_BRANCH: "a-preprod", BUILD_SITE: "a" },
   api: { COMMIT_HASH: "canary-preprod", BUILD_SITE: "ac", STAGE: "preprod" },
   "api-report": { COMMIT_HASH: "canary-preprod", BUILD_SITE: "ac", STAGE: "preprod" },
   "api-doc": { COMMIT_HASH: "canary-preprod", BUILD_SITE: "ac", STAGE: "preprod" },
@@ -28085,7 +28085,7 @@ function registerJenkinsConfigureTool(server2) {
 }
 
 // src/tools/jenkins-list.tool.ts
-var SUMMARY_KEYS = ["COMMIT_HASH", "BranchName", "BUILD_SITE", "SITE", "STAGE", "SERVICE_NAME", "configuration"];
+var SUMMARY_KEYS = ["BUILD_BRANCH", "BranchName", "BUILD_SITE", "STAGE", "SERVICE_NAME", "configuration"];
 function registerJenkinsListTool(server2) {
   defineTool(
     server2,

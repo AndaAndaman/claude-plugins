@@ -27402,10 +27402,10 @@ function registerEcsScaleTool(server2) {
   defineTool(
     server2,
     "aws_ecs_scale",
-    `Scale all ECS services tagged with ${getTagKey()} to desiredCount=1. Use confirm=false to preview, confirm=true to execute.`,
+    `Scale all ECS services tagged with ${getTagKey()} to desiredCount=1. Example: {confirm: true} or {tagValue: "my-tag", confirm: false}`,
     {
       tagValue: external_exports4.string().optional().describe(`Tag value to filter by (default: "${getTagValue()}")`),
-      confirm: external_exports4.boolean().describe("Set true to actually perform the scaling (default: false = preview only)")
+      confirm: external_exports4.coerce.boolean().describe("true to execute, false to preview (boolean, default: false)")
     },
     async (input) => {
       const tagValue = input.tagValue ?? getTagValue();
@@ -27483,12 +27483,12 @@ function registerEcsUpdateServiceTool(server2) {
   defineTool(
     server2,
     "aws_ecs_update_service",
-    "Update a single ECS service desired count. Use confirm=false to preview, confirm=true to execute.",
+    'Update a single ECS service desired count. Example: {cluster: "my-cluster", service: "my-svc", desiredCount: 1, confirm: true}',
     {
       cluster: external_exports4.string().describe("ECS cluster name"),
       service: external_exports4.string().describe("ECS service name"),
-      desiredCount: external_exports4.number().describe("New desired count for the service (integer >= 0)"),
-      confirm: external_exports4.boolean().describe("Set true to actually perform the update (default: false = preview only)")
+      desiredCount: external_exports4.coerce.number().describe("New desired count (number, integer >= 0)"),
+      confirm: external_exports4.coerce.boolean().describe("true to execute, false to preview (boolean, default: false)")
     },
     async (input) => {
       const cluster = input.cluster;
@@ -27642,7 +27642,7 @@ function registerSsoRefreshTool(server2) {
     "aws_sso_refresh",
     `Refresh AWS SSO credentials. If the SSO session is expired, triggers browser-based login. Exports credentials to the "${SSO_CRED_PROFILE}" profile in ~/.aws/credentials.`,
     {
-      force: external_exports4.boolean().optional().describe("Force re-login even if session is still valid (default: false)")
+      force: external_exports4.coerce.boolean().optional().describe("Force re-login even if session is still valid (boolean, default: false)")
     },
     async (input) => {
       const lines = ["=== AWS SSO Credential Refresh ==="];
@@ -28092,7 +28092,7 @@ function registerJenkinsListTool(server2) {
     "jenkins_list_targets",
     "List available Jenkins build targets. Use verbose=true to see all parameters.",
     {
-      verbose: external_exports4.boolean().optional().describe("Show all default parameters (default: false, shows summary)")
+      verbose: external_exports4.coerce.boolean().optional().describe("Show all default parameters (boolean, default: false)")
     },
     async (input) => {
       const config2 = loadJenkinsConfig();
@@ -28133,11 +28133,11 @@ function registerJenkinsBuildTool(server2) {
   defineTool(
     server2,
     "jenkins_build",
-    `Trigger a Jenkins build. Targets: ${Object.keys(BUILD_TARGETS).join(", ")}. Use watch=true to poll until build starts.`,
+    `Trigger a Jenkins build. Targets: ${Object.keys(BUILD_TARGETS).join(", ")}. Example: {target: "ui", watch: true} or {target: "api", params: '{"COMMIT_HASH":"main"}'}`,
     {
       target: external_exports4.string().describe(`Build target: ${Object.keys(BUILD_TARGETS).join(", ")}`),
       params: external_exports4.string().optional().describe('JSON overrides, e.g. {"COMMIT_HASH":"main"}'),
-      watch: external_exports4.boolean().optional().describe("Wait for build to start (default: false)")
+      watch: external_exports4.coerce.boolean().optional().describe("Wait for build to start (boolean, default: false)")
     },
     async (input) => {
       const target = input.target;
@@ -28196,10 +28196,10 @@ function registerJenkinsStatusTool(server2) {
   defineTool(
     server2,
     "jenkins_status",
-    "Check Jenkins build or queue status with console output.",
+    'Check Jenkins build or queue status with console output. Example: {url: "https://jenkins.example.com/job/build/123", lines: 30}',
     {
       url: external_exports4.string().describe("Jenkins build URL or queue URL"),
-      lines: external_exports4.number().optional().describe("Console lines to show (default: 20)")
+      lines: external_exports4.coerce.number().optional().describe("Console lines to show (number, default: 20)")
     },
     async (input) => {
       const url2 = input.url.trim();
@@ -28595,8 +28595,8 @@ function registerHealthcheckTool(server2) {
       name: external_exports4.string().optional().describe("Endpoint name (required for add/edit/remove, optional for check to target one)"),
       url: external_exports4.string().optional().describe("Endpoint URL (required for add, optional for edit)"),
       method: external_exports4.enum(["GET", "HEAD"]).optional().describe("HTTP method (default GET)"),
-      expected_status: external_exports4.number().optional().describe("Expected HTTP status code (default 200)"),
-      timeout_ms: external_exports4.number().optional().describe("Request timeout in ms (default 5000)"),
+      expected_status: external_exports4.coerce.number().optional().describe("Expected HTTP status code (number, default 200)"),
+      timeout_ms: external_exports4.coerce.number().optional().describe("Request timeout in ms (number, default 5000)"),
       headers: external_exports4.string().optional().describe('JSON string of headers, e.g. {"Authorization":"Bearer xxx"}')
     },
     async (input) => {

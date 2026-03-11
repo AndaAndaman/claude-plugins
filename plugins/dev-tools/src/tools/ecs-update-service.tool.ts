@@ -7,12 +7,12 @@ export function registerEcsUpdateServiceTool(server: McpServer): void {
   defineTool(
     server,
     'aws_ecs_update_service',
-    'Update a single ECS service desired count. Use confirm=false to preview, confirm=true to execute.',
+    'Update a single ECS service desired count. Example: {cluster: "my-cluster", service: "my-svc", desiredCount: 1, confirm: true}',
     {
       cluster: z.string().describe('ECS cluster name'),
       service: z.string().describe('ECS service name'),
-      desiredCount: z.number().describe('New desired count for the service (integer >= 0)'),
-      confirm: z.boolean().describe('Set true to actually perform the update (default: false = preview only)'),
+      desiredCount: z.coerce.number().describe('New desired count (number, integer >= 0)'),
+      confirm: z.coerce.boolean().describe('true to execute, false to preview (boolean, default: false)'),
     },
     async (input) => {
       const cluster = input.cluster as string;

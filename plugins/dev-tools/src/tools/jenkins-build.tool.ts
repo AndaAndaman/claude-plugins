@@ -10,11 +10,11 @@ export function registerJenkinsBuildTool(server: McpServer): void {
   defineTool(
     server,
     'jenkins_build',
-    `Trigger a Jenkins build. Targets: ${Object.keys(BUILD_TARGETS).join(', ')}. Use watch=true to poll until build starts.`,
+    `Trigger a Jenkins build. Targets: ${Object.keys(BUILD_TARGETS).join(', ')}. Example: {target: "ui", watch: true} or {target: "api", params: '{"COMMIT_HASH":"main"}'}`,
     {
       target: z.string().describe(`Build target: ${Object.keys(BUILD_TARGETS).join(', ')}`),
       params: z.string().optional().describe('JSON overrides, e.g. {"COMMIT_HASH":"main"}'),
-      watch: z.boolean().optional().describe('Wait for build to start (default: false)'),
+      watch: z.coerce.boolean().optional().describe('Wait for build to start (boolean, default: false)'),
     },
     async (input) => {
       const target = input.target as string;

@@ -12,7 +12,7 @@ export function registerJenkinsListTool(server: McpServer): void {
     'jenkins_list_targets',
     'List available Jenkins build targets. Use verbose=true to see all parameters.',
     {
-      verbose: z.boolean().optional().describe('Show all default parameters (default: false, shows summary)'),
+      verbose: z.coerce.boolean().optional().describe('Show all default parameters (boolean, default: false)'),
     },
     async (input) => {
       const config = loadJenkinsConfig();

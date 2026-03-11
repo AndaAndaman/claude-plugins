@@ -77,8 +77,8 @@ export function registerHealthcheckTool(server: McpServer): void {
       name: z.string().optional().describe('Endpoint name (required for add/edit/remove, optional for check to target one)'),
       url: z.string().optional().describe('Endpoint URL (required for add, optional for edit)'),
       method: z.enum(['GET', 'HEAD']).optional().describe('HTTP method (default GET)'),
-      expected_status: z.number().optional().describe('Expected HTTP status code (default 200)'),
-      timeout_ms: z.number().optional().describe('Request timeout in ms (default 5000)'),
+      expected_status: z.coerce.number().optional().describe('Expected HTTP status code (number, default 200)'),
+      timeout_ms: z.coerce.number().optional().describe('Request timeout in ms (number, default 5000)'),
       headers: z.string().optional().describe('JSON string of headers, e.g. {"Authorization":"Bearer xxx"}'),
     },
     async (input) => {

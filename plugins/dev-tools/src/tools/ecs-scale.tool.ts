@@ -8,10 +8,10 @@ export function registerEcsScaleTool(server: McpServer): void {
   defineTool(
     server,
     'aws_ecs_scale',
-    `Scale all ECS services tagged with ${getTagKey()} to desiredCount=1. Use confirm=false to preview, confirm=true to execute.`,
+    `Scale all ECS services tagged with ${getTagKey()} to desiredCount=1. Example: {confirm: true} or {tagValue: "my-tag", confirm: false}`,
     {
       tagValue: z.string().optional().describe(`Tag value to filter by (default: "${getTagValue()}")`),
-      confirm: z.boolean().describe('Set true to actually perform the scaling (default: false = preview only)'),
+      confirm: z.coerce.boolean().describe('true to execute, false to preview (boolean, default: false)'),
     },
     async (input) => {
       const tagValue = (input.tagValue as string) ?? getTagValue();

@@ -10,7 +10,7 @@ export function registerSsoRefreshTool(server: McpServer): void {
     'aws_sso_refresh',
     `Refresh AWS SSO credentials. If the SSO session is expired, triggers browser-based login. Exports credentials to the "${SSO_CRED_PROFILE}" profile in ~/.aws/credentials.`,
     {
-      force: z.boolean().optional().describe('Force re-login even if session is still valid (default: false)'),
+      force: z.coerce.boolean().optional().describe('Force re-login even if session is still valid (boolean, default: false)'),
     },
     async (input) => {
       const lines: string[] = ['=== AWS SSO Credential Refresh ==='];

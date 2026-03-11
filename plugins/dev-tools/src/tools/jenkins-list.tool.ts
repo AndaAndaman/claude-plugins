@@ -1,10 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { defineTool, textResult } from '../shared/mcp-helpers.js';
-import { BUILD_TARGETS, PREPROD_OVERRIDES, loadJenkinsConfig, resolveJobPath } from '../shared/jenkins.js';
+import { BUILD_TARGETS, loadJenkinsConfig, resolveJobPath, getEffectiveDefaults } from '../shared/jenkins.js';
 
 // Key params to show in summary (the rest are boilerplate)
-const SUMMARY_KEYS = ['COMMIT_HASH', 'BranchName', 'BUILD_SITE', 'SITE', 'STAGE', 'SERVICE_NAME', 'configuration'];
+const SUMMARY_KEYS = ['COMMIT_HASH', 'BUILD_BRANCH', 'BranchName', 'BUILD_SITE', 'SITE', 'STAGE', 'SERVICE_NAME', 'configuration'];
 
 export function registerJenkinsListTool(server: McpServer): void {
   defineTool(
@@ -23,11 +23,7 @@ export function registerJenkinsListTool(server: McpServer): void {
       ];
 
       for (const [key, target] of Object.entries(BUILD_TARGETS)) {
-        const envOverrides = config.environment === 'preprod'
-          ? (PREPROD_OVERRIDES[key] || {})
-          : {};
-        const configOverrides = config.targetDefaults?.[key] || {};
-        const defaults = { ...target.defaults, ...envOverrides, ...configOverrides };
+        const defaults = getEffectiveDefaults(key, target, config);
 
         if (verbose) {
           const jobPath = resolveJobPath(target, config);

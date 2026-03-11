@@ -1,10 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
-import { BUILD_TARGETS, PREPROD_OVERRIDES, triggerBuild, getQueueStatus, getBuildStatus, loadJenkinsConfig } from '../shared/jenkins.js';
+import { BUILD_TARGETS, triggerBuild, getQueueStatus, getBuildStatus, loadJenkinsConfig, getEffectiveDefaults } from '../shared/jenkins.js';
 
 // Only show these key params in build summary
-const SUMMARY_KEYS = ['COMMIT_HASH', 'BranchName', 'BUILD_SITE', 'SITE', 'STAGE', 'SERVICE_NAME', 'configuration'];
+const SUMMARY_KEYS = ['COMMIT_HASH', 'BUILD_BRANCH', 'BranchName', 'BUILD_SITE', 'SITE', 'STAGE', 'SERVICE_NAME', 'configuration'];
 
 export function registerJenkinsBuildTool(server: McpServer): void {
   defineTool(
@@ -34,11 +34,7 @@ export function registerJenkinsBuildTool(server: McpServer): void {
 
       const bt = BUILD_TARGETS[target];
       const config = loadJenkinsConfig();
-      const envOverrides = config.environment === 'preprod'
-        ? (PREPROD_OVERRIDES[target] || {})
-        : {};
-      const configOverrides = config.targetDefaults?.[target] || {};
-      const merged = { ...bt.defaults, ...envOverrides, ...configOverrides, ...params };
+      const merged = { ...getEffectiveDefaults(target, bt, config), ...params };
 
       const lines: string[] = [
         `[${config.environment}] ${target}: ${bt.description}`,

@@ -87,6 +87,7 @@ export interface BuildTarget {
   jobPathKey: 'ui' | 'api' | 'lambda';
   jobPathOverride?: string; // for special cases like lambda-pdf-preview
   defaults: Record<string, string>;
+  preprodDefaults?: Record<string, string>; // full replacement when env=preprod (different param schema)
 }
 
 export const BUILD_TARGETS: Record<string, BuildTarget> = {
@@ -101,6 +102,14 @@ export const BUILD_TARGETS: Record<string, BuildTarget> = {
       FORCE_YARN: 'true',
       SOURCE_MAP_ENABLE: 'false',
       NX_RESET: 'false',
+    },
+    preprodDefaults: {
+      BUILD_BRANCH: 'a-preprod',
+      BUILD_SITE: 'a',
+      app_name: 'ui',
+      SERVICE_NAME: 'new-ui',
+      FORCE_YARN: 'yes',
+      SOURCE_MAP_ENABLE: 'false',
     },
   },
   api: {
@@ -204,7 +213,6 @@ export const BUILD_TARGETS: Record<string, BuildTarget> = {
 
 // Environment-aware default overrides (preprod values differ from staging)
 export const PREPROD_OVERRIDES: Record<string, Record<string, string>> = {
-  ui:              { COMMIT_HASH: 'a-preprod', SITE: 'ac' },
   api:             { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },
   'api-report':    { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },
   'api-doc':       { COMMIT_HASH: 'canary-preprod', BUILD_SITE: 'ac', STAGE: 'preprod' },
@@ -215,6 +223,21 @@ export const PREPROD_OVERRIDES: Record<string, Record<string, string>> = {
 };
 
 // ---------- Helpers ----------
+
+/** Get effective defaults for a target, considering environment and config overrides. */
+export function getEffectiveDefaults(targetKey: string, target: BuildTarget, config: JenkinsConfig): Record<string, string> {
+  // If target has full preprod replacement, use that instead of merge
+  if (config.environment === 'preprod' && target.preprodDefaults) {
+    const configOverrides = config.targetDefaults?.[targetKey] || {};
+    return { ...target.preprodDefaults, ...configOverrides };
+  }
+
+  const envOverrides = config.environment === 'preprod'
+    ? (PREPROD_OVERRIDES[targetKey] || {})
+    : {};
+  const configOverrides = config.targetDefaults?.[targetKey] || {};
+  return { ...target.defaults, ...envOverrides, ...configOverrides };
+}
 
 export function resolveJobPath(target: BuildTarget, config: JenkinsConfig): string {
   if (target.jobPathOverride) {
@@ -291,12 +314,8 @@ export function triggerBuild(target: string, params: Record<string, string>): Tr
     return { success: false, error: `Unknown target: ${target}. Available: ${Object.keys(BUILD_TARGETS).join(', ')}` };
   }
 
-  // Merge defaults with environment overrides, config overrides, then user params
-  const envOverrides = config.environment === 'preprod'
-    ? (PREPROD_OVERRIDES[target] || {})
-    : {};
-  const configOverrides = config.targetDefaults?.[target] || {};
-  const merged = { ...bt.defaults, ...envOverrides, ...configOverrides, ...params };
+  // Merge effective defaults with user params
+  const merged = { ...getEffectiveDefaults(target, bt, config), ...params };
   const jobPath = resolveJobPath(bt, config);
   const url = `${config.url}/job/${jobPath}/buildWithParameters`;
 

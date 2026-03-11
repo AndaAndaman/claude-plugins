@@ -10,11 +10,11 @@ export function registerJenkinsBuildTool(server: McpServer): void {
   defineTool(
     server,
     'jenkins_build',
-    `Trigger a Jenkins build. Targets: ${Object.keys(BUILD_TARGETS).join(', ')}. Example: {target: "ui", watch: true} or {target: "api", params: '{"COMMIT_HASH":"main"}'}`,
+    `Trigger a Jenkins build. Targets: ${Object.keys(BUILD_TARGETS).join(', ')}. Example: {target: "ui"} or {target: "api", params: '{"COMMIT_HASH":"main"}'}`,
     {
       target: z.string().describe(`Build target: ${Object.keys(BUILD_TARGETS).join(', ')}`),
       params: z.string().optional().describe('JSON overrides, e.g. {"COMMIT_HASH":"main"}'),
-      watch: z.coerce.boolean().optional().describe('Wait for build to start (boolean, default: false)'),
+      watch: z.coerce.boolean().optional().describe('Poll until build starts (boolean, default: false)'),
     },
     async (input) => {
       const target = input.target as string;
@@ -40,20 +40,22 @@ export function registerJenkinsBuildTool(server: McpServer): void {
       const configOverrides = config.targetDefaults?.[target] || {};
       const merged = { ...bt.defaults, ...envOverrides, ...configOverrides, ...params };
 
-      // Compact summary: only key params + any user overrides
-      const showKeys = new Set([...SUMMARY_KEYS, ...Object.keys(params)]);
-      const summary = Object.entries(merged)
-        .filter(([k]) => showKeys.has(k))
-        .map(([k, v]) => `${k}=${v || '""'}`)
-        .join('  ');
-
       const lines: string[] = [
-        `[${config.environment}] ${target}: ${summary}`,
+        `[${config.environment}] ${target}: ${bt.description}`,
+        '',
       ];
+
+      // Show all params that will be sent
+      for (const [k, v] of Object.entries(merged)) {
+        const isOverride = k in params;
+        lines.push(`  ${k}: ${v || '""'}${isOverride ? ' (override)' : ''}`);
+      }
+
+      lines.push('');
 
       const result = triggerBuild(target, params);
       if (!result.success) {
-        return errorResult(`${lines[0]}\nFailed: ${result.error}`);
+        return errorResult(`${lines.join('\n')}\nFailed: ${result.error}`);
       }
 
       lines.push(`Queued: ${result.queueUrl}`);

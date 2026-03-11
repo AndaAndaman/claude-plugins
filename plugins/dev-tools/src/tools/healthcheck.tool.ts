@@ -49,7 +49,7 @@ function formatBody(body?: string): string {
     const json = JSON.parse(body);
     const fields: string[] = [];
     // Extract common build info fields
-    for (const key of ['gitHash', 'git_hash', 'commitHash', 'commit', 'version', 'buildTime', 'build_time', 'buildDate', 'build_date', 'timestamp', 'env', 'environment']) {
+    for (const key of ['gitHash', 'git_hash', 'gitCommitHash', 'commitHash', 'commit_hash', 'commit', 'version', 'buildTime', 'build_time', 'buildDate', 'build_date', 'timestamp', 'env', 'environment']) {
       if (json[key] !== undefined) fields.push(`${key}: ${json[key]}`);
     }
     // If no known fields found, show compact JSON

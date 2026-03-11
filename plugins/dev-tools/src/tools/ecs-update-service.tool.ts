@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runAwsWithProfile } from '../shared/aws.js';
+import { UpdateServiceCommand } from '@aws-sdk/client-ecs';
+import { ecsClient, formatAwsError } from '../shared/aws-client.js';
 import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
 
 export function registerEcsUpdateServiceTool(server: McpServer): void {
@@ -29,23 +30,22 @@ export function registerEcsUpdateServiceTool(server: McpServer): void {
 
         const lines: string[] = [`Updating service ${service} in cluster ${cluster} to desired count ${desiredCount}`];
 
-        const result = runAwsWithProfile([
-          'ecs', 'update-service',
-          '--cluster', cluster,
-          '--service', service,
-          '--desired-count', String(desiredCount),
-          '--output', 'table',
-          '--query', 'service.[serviceName,desiredCount,runningCount]',
-        ]);
+        const client = ecsClient();
+        const updateResponse = await client.send(new UpdateServiceCommand({
+          cluster,
+          service,
+          desiredCount,
+        }));
 
-        if (result.status !== 0) {
-          return errorResult(`Error: ${result.stderr}`);
+        const svc = updateResponse.service;
+        if (!svc) {
+          return errorResult('Update sent but no service details returned.');
         }
 
-        lines.push(result.stdout.trim());
+        lines.push(`  ${svc.serviceName}: desired=${svc.desiredCount}, running=${svc.runningCount}`);
         return textResult(lines.join('\n'));
       } catch (error: unknown) {
-        return errorResult(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        return errorResult(formatAwsError(error));
       }
     },
   );

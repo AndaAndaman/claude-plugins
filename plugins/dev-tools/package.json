@@ -3,9 +3,13 @@
   "version": "0.2.0",
   "description": "AWS CLI tools exposed as MCP tools",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --target=node18 --format=cjs --outfile=dist/devtool.server.js"
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node18 --format=cjs --minify --tree-shaking=true --outfile=dist/devtool.server.js"
   },
   "dependencies": {
+    "@aws-sdk/client-ecs": "^3.1006.0",
+    "@aws-sdk/client-resource-groups-tagging-api": "^3.1006.0",
+    "@aws-sdk/client-sts": "^3.1006.0",
+    "@aws-sdk/credential-providers": "^3.1006.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^3.23.0"
   },

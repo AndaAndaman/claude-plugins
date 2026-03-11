@@ -1,8 +1,49 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { homedir } from 'node:os';
+import { fromIni } from '@aws-sdk/credential-providers';
+import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
 import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
 import { getSsoExpiry, SSO_PROFILE, SSO_CRED_PROFILE } from '../shared/sso.js';
+import { DEFAULT_REGION } from '../shared/aws-client.js';
 import { runAws } from '../shared/aws.js';
+
+const CREDENTIALS_FILE = join(homedir(), '.aws', 'credentials');
+
+/** Read ~/.aws/credentials as a string, returning '' if missing. */
+function readCredentialsFile(): string {
+  try {
+    return readFileSync(CREDENTIALS_FILE, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
+/** Write a profile section into ~/.aws/credentials, replacing if it exists. */
+function writeCredentialProfile(profile: string, accessKeyId: string, secretAccessKey: string, sessionToken: string): void {
+  const header = `[${profile}]`;
+  const section = [
+    header,
+    `aws_access_key_id=${accessKeyId}`,
+    `aws_secret_access_key=${secretAccessKey}`,
+    `aws_session_token=${sessionToken}`,
+  ].join('\n');
+
+  const existing = readCredentialsFile();
+  const profileRegex = new RegExp(`\\[${profile}\\][^\\[]*`, 's');
+
+  let updated: string;
+  if (profileRegex.test(existing)) {
+    updated = existing.replace(profileRegex, section + '\n');
+  } else {
+    updated = existing.trimEnd() + (existing ? '\n\n' : '') + section + '\n';
+  }
+
+  mkdirSync(join(homedir(), '.aws'), { recursive: true });
+  writeFileSync(CREDENTIALS_FILE, updated, 'utf8');
+}
 
 export function registerSsoRefreshTool(server: McpServer): void {
   defineTool(
@@ -24,6 +65,7 @@ export function registerSsoRefreshTool(server: McpServer): void {
       if (isValid && !force) {
         lines.push('[OK] SSO session is still valid, refreshing credentials...');
       } else {
+        // aws sso login must remain CLI — it opens an interactive browser flow
         lines.push('[LOGIN] SSO session expired or force refresh, opening browser...');
         const login = runAws(['sso', 'login', '--profile', SSO_PROFILE]);
         if (login.status !== 0) {
@@ -32,49 +74,41 @@ export function registerSsoRefreshTool(server: McpServer): void {
         lines.push('[OK] SSO login successful.');
       }
 
-      // Export credentials
-      const creds = runAws(['configure', 'export-credentials', '--profile', SSO_PROFILE, '--format', 'env-no-export']);
-      if (creds.status !== 0 || !creds.stdout.trim()) {
-        return errorResult(`[ERROR] Could not export SSO credentials.\n${creds.stderr}\nTry: aws sso login --profile ${SSO_PROFILE}`);
+      // Resolve credentials from SSO profile using SDK
+      let resolvedCreds: { accessKeyId: string; secretAccessKey: string; sessionToken?: string };
+      try {
+        const provider = fromIni({ profile: SSO_PROFILE });
+        resolvedCreds = await provider();
+      } catch (err: unknown) {
+        return errorResult(
+          `[ERROR] Could not resolve SSO credentials.\n${err instanceof Error ? err.message : String(err)}\nTry: aws sso login --profile ${SSO_PROFILE}`,
+        );
       }
 
-      // Parse env format
-      const env = Object.fromEntries(
-        creds.stdout.split('\n')
-          .filter(l => l.includes('='))
-          .map(l => { const i = l.indexOf('='); return [l.slice(0, i), l.slice(i + 1)]; })
-      );
-
-      const accessKey = env['AWS_ACCESS_KEY_ID'];
-      const secretKey = env['AWS_SECRET_ACCESS_KEY'];
-      const sessionToken = env['AWS_SESSION_TOKEN'];
-
-      if (!accessKey || !secretKey) {
-        return errorResult('[ERROR] Failed to parse credentials from export output.');
+      const { accessKeyId, secretAccessKey, sessionToken = '' } = resolvedCreds;
+      if (!accessKeyId || !secretAccessKey) {
+        return errorResult('[ERROR] Resolved credentials are incomplete.');
       }
 
-      // Write to credential profile
-      for (const [key, val] of [
-        ['aws_access_key_id', accessKey],
-        ['aws_secret_access_key', secretKey],
-        ['aws_session_token', sessionToken],
-      ]) {
-        if (val) {
-          const r = runAws(['configure', 'set', key, val, '--profile', SSO_CRED_PROFILE]);
-          if (r.status !== 0) {
-            return errorResult(`[ERROR] Failed to set ${key}: ${r.stderr}`);
-          }
-        }
+      // Write directly to ~/.aws/credentials INI file
+      try {
+        writeCredentialProfile(SSO_CRED_PROFILE, accessKeyId, secretAccessKey, sessionToken);
+      } catch (err: unknown) {
+        return errorResult(`[ERROR] Failed to write credentials file: ${err instanceof Error ? err.message : String(err)}`);
       }
 
       lines.push(`[OK] Credentials written to profile: ${SSO_CRED_PROFILE}`);
 
-      // Verify
-      const verify = runAws(['sts', 'get-caller-identity', '--profile', SSO_CRED_PROFILE, '--output', 'text']);
-      if (verify.status === 0) {
-        lines.push(`[OK] Verified: ${verify.stdout.trim()}`);
-      } else {
-        lines.push('[WARN] Credentials written but verification failed.');
+      // Verify with STS SDK call
+      try {
+        const sts = new STSClient({
+          region: DEFAULT_REGION,
+          credentials: { accessKeyId, secretAccessKey, sessionToken },
+        });
+        const identity = await sts.send(new GetCallerIdentityCommand({}));
+        lines.push(`[OK] Verified: Account=${identity.Account} UserId=${identity.UserId} Arn=${identity.Arn}`);
+      } catch (err: unknown) {
+        lines.push(`[WARN] Credentials written but verification failed: ${err instanceof Error ? err.message : String(err)}`);
       }
 
       // Show expiry

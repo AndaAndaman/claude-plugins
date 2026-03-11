@@ -1,7 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { runAwsWithProfile } from '../shared/aws.js';
-import { getProfile, getTagKey, getTagValue } from '../shared/config.js';
+import { UpdateServiceCommand } from '@aws-sdk/client-ecs';
+import { ecsClient, getServiceArnsByTag, parseEcsArn, formatAwsError } from '../shared/aws-client.js';
+import { getTagKey, getTagValue } from '../shared/config.js';
 import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
 
 export function registerEcsScaleTool(server: McpServer): void {
@@ -19,30 +20,13 @@ export function registerEcsScaleTool(server: McpServer): void {
       const lines: string[] = [`Finding services with tag ${getTagKey()}=${tagValue}...`];
 
       try {
-        const arnResult = runAwsWithProfile([
-          'resourcegroupstaggingapi', 'get-resources',
-          '--resource-type-filters', 'ecs:service',
-          '--tag-filters', `Key=${getTagKey()},Values=${tagValue}`,
-          '--query', 'ResourceTagMappingList[].ResourceARN',
-          '--output', 'text',
-        ]);
+        const arns = await getServiceArnsByTag(getTagKey(), tagValue);
 
-        if (arnResult.status !== 0) {
-          return errorResult(`Error fetching ARNs: ${arnResult.stderr}`);
-        }
-
-        const arns = arnResult.stdout.trim().split(/\s+/).filter(Boolean);
         if (arns.length === 0) {
           return textResult(`No services found for tag ${getTagKey()}=${tagValue}`);
         }
 
-        const services: Array<{ cluster: string; service: string }> = [];
-        for (const arn of arns) {
-          const parts = arn.split('/');
-          const cluster = parts[1];
-          const service = parts[2];
-          if (cluster && service) services.push({ cluster, service });
-        }
+        const services = arns.map(parseEcsArn).filter((s): s is NonNullable<typeof s> => s !== null);
 
         if (!confirm) {
           lines.push(`\nWould scale ${services.length} service(s) to desiredCount=1:`);
@@ -54,23 +38,25 @@ export function registerEcsScaleTool(server: McpServer): void {
         }
 
         lines.push(`\nScaling ${services.length} service(s) to desiredCount=1...`);
-        for (const { cluster, service } of services) {
-          lines.push(`\nScaling up service ${service} in cluster ${cluster} to desired count 1...`);
-          const updateResult = runAwsWithProfile([
-            'ecs', 'update-service',
-            '--cluster', cluster,
-            '--service', service,
-            '--desired-count', '1',
-            '--output', 'table',
-            '--query', 'service.[serviceName,desiredCount,runningCount]',
-          ]);
-          lines.push(updateResult.status !== 0 ? `  Error: ${updateResult.stderr}` : updateResult.stdout.trim());
-        }
+        const client = ecsClient();
+
+        const results = await Promise.all(services.map(async ({ cluster, service }) => {
+          try {
+            const resp = await client.send(new UpdateServiceCommand({ cluster, service, desiredCount: 1 }));
+            const svc = resp.service;
+            return svc
+              ? `  ${svc.serviceName}: desired=${svc.desiredCount}, running=${svc.runningCount}`
+              : `  ${service}: update sent (no details returned)`;
+          } catch (err: unknown) {
+            return `  ${service}: ${formatAwsError(err)}`;
+          }
+        }));
+        lines.push(...results);
 
         lines.push('\nBatch update completed.');
         return textResult(lines.join('\n'));
       } catch (error: unknown) {
-        return errorResult(`Error: ${error instanceof Error ? error.message : String(error)}`);
+        return errorResult(formatAwsError(error));
       }
     },
   );

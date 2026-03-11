@@ -1,5 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import { getProfile } from './config.js';
 
 export interface AwsResult {
   stdout: string;
@@ -14,8 +13,4 @@ export function runAws(args: string[]): AwsResult {
     stderr: result.stderr ?? '',
     status: result.status ?? 1,
   };
-}
-
-export function runAwsWithProfile(args: string[]): AwsResult {
-  return runAws([...args, '--profile', getProfile()]);
 }

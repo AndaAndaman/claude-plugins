@@ -52,7 +52,15 @@ If the plugin has a build step (check for `package.json` with `build` script):
 cd plugins/<name> && npm run build
 ```
 
-### Step 5: Commit
+### Step 5: Update README
+
+If the changes are significant (new features, removed dependencies, architecture changes), update the plugin's README or the root `README.md` to reflect the changes:
+- Update feature descriptions, tool lists, or usage examples that no longer match
+- Update dependency/requirement sections (e.g., if CLI dependency was removed)
+- Keep changes minimal — only update sections affected by the code changes
+- Skip this step for trivial patches (bug fixes, config tweaks)
+
+### Step 6: Commit
 
 Stage all changes and commit:
 - If `[message]` provided, use it as the commit message
@@ -64,13 +72,13 @@ Stage specific files (not `git add -A`):
 - Updated plugin.json and marketplace.json
 - Built dist files (if any)
 
-### Step 6: Push
+### Step 7: Push
 
 ```bash
 git push
 ```
 
-### Step 7: Report
+### Step 8: Report
 
 Output:
 ```

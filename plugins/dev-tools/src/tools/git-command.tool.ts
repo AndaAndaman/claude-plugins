@@ -116,6 +116,97 @@ function cherryPick(commit: string): string {
   return `Cherry-picked: ${log.stdout}`;
 }
 
+function gitStatus(): string {
+  const branch = currentBranch() || '(detached HEAD)';
+  const { stdout: porcelain } = git('status', '--porcelain');
+  const { stdout: ahead } = git('rev-list', '--count', '@{u}..HEAD');
+  const { stdout: behind } = git('rev-list', '--count', 'HEAD..@{u}');
+
+  const lines: string[] = [`Branch: ${branch}`];
+
+  const a = parseInt(ahead) || 0;
+  const b = parseInt(behind) || 0;
+  if (a || b) lines.push(`Ahead: ${a}  Behind: ${b}`);
+
+  if (!porcelain) {
+    lines.push('Clean working tree');
+  } else {
+    const files = porcelain.split('\n');
+    const staged = files.filter(f => f[0] !== ' ' && f[0] !== '?').length;
+    const modified = files.filter(f => f[1] === 'M' || f[1] === 'D').length;
+    const untracked = files.filter(f => f.startsWith('??')).length;
+    if (staged) lines.push(`Staged: ${staged}`);
+    if (modified) lines.push(`Modified: ${modified}`);
+    if (untracked) lines.push(`Untracked: ${untracked}`);
+    lines.push('---');
+    lines.push(...files.map(f => `  ${f}`));
+  }
+  return lines.join('\n');
+}
+
+function gitStash(pop?: boolean, message?: string): string {
+  if (pop) {
+    const list = git('stash', 'list');
+    if (!list.stdout) return 'No stashes to pop.';
+    const result = git('stash', 'pop');
+    if (!result.ok) return `Stash pop failed: ${result.stderr}`;
+    return `Popped stash. ${result.stdout}`;
+  }
+
+  const { stdout: status } = git('status', '--porcelain');
+  if (!status) return 'Nothing to stash (clean working tree).';
+
+  const args = ['stash', 'push', '--include-untracked'];
+  if (message) args.push('-m', message);
+
+  const result = git(...args);
+  if (!result.ok) return `Stash failed: ${result.stderr}`;
+  return result.stdout || 'Stashed changes.';
+}
+
+function gitStashList(): string {
+  const result = git('stash', 'list');
+  if (!result.ok) return `Error: ${result.stderr}`;
+  if (!result.stdout) return 'No stashes.';
+  return result.stdout;
+}
+
+function gitSwitch(branch: string, create?: boolean): string {
+  if (create) {
+    const result = git('checkout', '-b', branch);
+    if (!result.ok) return `Error: ${result.stderr}`;
+    return `Created and switched to ${branch}`;
+  }
+
+  const result = git('checkout', branch);
+  if (!result.ok) return `Error: ${result.stderr}`;
+  return `Switched to ${branch}`;
+}
+
+function gitResetSoft(count: number): string {
+  const branch = currentBranch();
+  if (!branch) return 'Error: not on a branch (detached HEAD).';
+
+  // Show what will be undone
+  const log = git('log', `--oneline`, `-${count}`);
+  const result = git('reset', '--soft', `HEAD~${count}`);
+  if (!result.ok) return `Reset failed: ${result.stderr}`;
+
+  return `Undid ${count} commit(s) (changes kept staged):\n${log.stdout}`;
+}
+
+function gitFetch(): string {
+  const result = git('fetch', '--all', '--prune');
+  if (!result.ok) return `Fetch failed: ${result.stderr}`;
+  return result.stderr || result.stdout || 'Fetched all remotes.';
+}
+
+function gitLog(count: number): string {
+  const result = git('log', `--oneline`, `--graph`, `-${count}`);
+  if (!result.ok) return `Error: ${result.stderr}`;
+  return result.stdout || 'No commits.';
+}
+
 function branchCleanup(): string {
   const branch = currentBranch();
   const mainBranch = git('rev-parse', '--verify', 'main').ok ? 'main' : 'master';
@@ -143,25 +234,40 @@ export function registerGitCommandTool(server: McpServer): void {
   defineTool(
     server,
     'git_command',
-    'Git workflow shortcuts: merge_to (merge current→target), pull_rebase (pull --rebase), rebase (rebase onto origin branch), cherry_pick, branch_cleanup (delete merged branches).',
+    'Git workflow shortcuts: status, stash/stash_pop/stash_list, switch (create/switch branch), merge_to, pull_rebase, rebase, cherry_pick, reset_soft, fetch, log, branch_cleanup.',
     {
-      action: z.enum(['merge_to', 'pull_rebase', 'rebase', 'cherry_pick', 'branch_cleanup']).describe(
-        'merge_to=merge current branch into target, pull_rebase=git pull --rebase, rebase=fetch + rebase onto origin branch, cherry_pick=pick a commit, branch_cleanup=delete merged branches'
+      action: z.enum([
+        'status', 'stash', 'stash_pop', 'stash_list', 'switch',
+        'merge_to', 'pull_rebase', 'rebase', 'cherry_pick',
+        'reset_soft', 'fetch', 'log', 'branch_cleanup',
+      ]).describe(
+        'status=branch+changes, stash=save WIP, stash_pop=restore WIP, stash_list=list stashes, switch=checkout/create branch, merge_to=merge current→target, pull_rebase=pull --rebase, rebase=onto origin branch, cherry_pick=pick commit, reset_soft=undo N commits (keep staged), fetch=fetch all remotes, log=recent commits, branch_cleanup=delete merged'
       ),
-      target: z.string().optional().describe('Target branch for merge_to or rebase (e.g. "main", "canary"). Default: "main"'),
+      target: z.string().optional().describe('Branch name for merge_to, rebase, or switch'),
       commit: z.string().optional().describe('Commit hash for cherry_pick'),
+      count: z.number().optional().describe('Number of commits for reset_soft (default: 1) or log (default: 10)'),
+      create: z.boolean().optional().describe('Create new branch for switch (default: false)'),
+      message: z.string().optional().describe('Stash message (optional)'),
     },
     async (input) => {
       const action = input.action as string;
+
+      if (action === 'status') return textResult(gitStatus());
+      if (action === 'stash') return textResult(gitStash(false, input.message as string | undefined));
+      if (action === 'stash_pop') return textResult(gitStash(true));
+      if (action === 'stash_list') return textResult(gitStashList());
+
+      if (action === 'switch') {
+        if (!input.target) return errorResult('switch requires target branch name.');
+        return textResult(gitSwitch(input.target as string, input.create as boolean | undefined));
+      }
 
       if (action === 'merge_to') {
         if (!input.target) return errorResult('merge_to requires target branch name.');
         return textResult(mergeTo(input.target as string));
       }
 
-      if (action === 'pull_rebase') {
-        return textResult(pullRebase());
-      }
+      if (action === 'pull_rebase') return textResult(pullRebase());
 
       if (action === 'rebase') {
         return textResult(rebase((input.target as string) || 'main'));
@@ -172,9 +278,13 @@ export function registerGitCommandTool(server: McpServer): void {
         return textResult(cherryPick(input.commit as string));
       }
 
-      if (action === 'branch_cleanup') {
-        return textResult(branchCleanup());
+      if (action === 'reset_soft') {
+        return textResult(gitResetSoft((input.count as number) || 1));
       }
+
+      if (action === 'fetch') return textResult(gitFetch());
+      if (action === 'log') return textResult(gitLog((input.count as number) || 10));
+      if (action === 'branch_cleanup') return textResult(branchCleanup());
 
       return errorResult('Unknown action.');
     },

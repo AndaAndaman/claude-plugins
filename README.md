@@ -145,15 +145,15 @@ The PM agent searches the codebase to count affected files and modules, then cla
 
 ---
 
-### dev-tools (v0.8.2)
+### dev-tools (v0.9.6)
 
 **Problem:** Switching between editor and terminal to manage AWS services, trigger Jenkins builds, or refresh SSO credentials breaks flow and requires remembering CLI flags.
 
-**Solution:** Exposes AWS ECS, SSO, Jenkins CI, and Git operations as MCP tools that Claude can call directly in natural language.
+**Solution:** Exposes AWS ECS, SSO, Jenkins CI, Git, and Healthcheck operations as MCP tools that Claude can call directly in natural language.
 
 **How it works:**
 
-An MCP server provides 13 tools organized by domain. Services are discovered via AWS resource tags, Jenkins targets are configurable per environment, and all destructive operations have confirm gates (preview by default).
+An MCP server provides 16 tools organized by domain. Services are discovered via AWS resource tags, Jenkins targets are configurable per environment (staging/preprod with independent parameter schemas), and all destructive operations have confirm gates (preview by default).
 
 **Tools:**
 
@@ -163,7 +163,9 @@ An MCP server provides 13 tools organized by domain. Services are discovered via
 | AWS SSO | `aws_sso_status`, `aws_sso_refresh` | Check SSO token expiry, refresh credentials |
 | AWS Config | `aws_configure` | View/change AWS profile and tag settings |
 | Jenkins | `jenkins_configure`, `jenkins_list_targets`, `jenkins_build`, `jenkins_status`, `jenkins_abort`, `jenkins_edit_config` | Configure, trigger, monitor, and abort CI builds |
-| Git | `git_command` | Execute git commands with safety guardrails |
+| Git | `git_command` | status, stash/pop, switch/create branch, merge_to, pull_rebase, rebase, cherry_pick, reset_soft, fetch, log, branch_cleanup |
+| Git Worktree | `git_worktree` | Create, list, remove, and prune worktrees |
+| Healthcheck | `healthcheck` | Check health of configured endpoints, manage endpoint list |
 
 ---
 
@@ -175,7 +177,7 @@ An MCP server provides 13 tools organized by domain. Services are discovered via
 | quick-wins | 0.3.5 | 2 | 1 | 2 (SessionStart, Stop) |
 | md-to-skill | 0.8.7 | 3 | 1 | 1 (Stop) |
 | feature-sprint | 0.8.2 | 3 | 7 | 1 (SessionStart) |
-| dev-tools | 0.8.2 | 0 | 0 | 1 (SessionStart) |
+| dev-tools | 0.9.6 | 0 | 0 | 1 (SessionStart) |
 
 ## FlowAccount Compatibility
 

@@ -177,10 +177,23 @@ Git workflow shortcuts with safety guardrails.
 
 | Action | Parameters | Description |
 |--------|-----------|-------------|
-| `merge_to` | `target` (required) | Merge current branch → target branch, push, return |
+| `status` | — | Branch, ahead/behind, staged/modified/untracked |
+| `diff` | `target?`, `staged?` | Show changes (stat format) |
+| `log` | `count?` (default: 10) | Recent commits (graph) |
+| `add` | `files` (required) | Stage files (comma/space separated) |
+| `remove` | `files` (required) | Unstage files |
+| `stash` | `message?` | Save WIP (includes untracked) |
+| `stash_pop` | — | Restore last stash |
+| `stash_list` | — | List stashes |
+| `switch` | `target`, `create?` | Checkout or create branch |
+| `merge_to` | `target` (required) | Merge current branch → target, return |
+| `pull` | — | Pull from remote |
 | `pull_rebase` | — | Pull with rebase |
-| `rebase` | `target` (default: main) | Rebase current branch onto target |
+| `push` | `force?` | Push to origin (force uses --force-with-lease) |
+| `rebase` | `target` (default: main) | Rebase onto origin/target |
 | `cherry_pick` | `commit` (required) | Cherry-pick a commit |
+| `reset_soft` | `count?` (default: 1) | Undo N commits (keep staged) |
+| `fetch` | — | Fetch all remotes with prune |
 | `branch_cleanup` | — | Delete all merged branches |
 
 ---
@@ -217,7 +230,7 @@ Check health of configured endpoints, or manage the endpoint list.
 
 **Jenkins manual:** `jenkins_configure` (set token once) → `jenkins_list_targets` → `jenkins_build` → `jenkins_status` → `jenkins_abort` (if needed)
 
-**Git:** `git_command action=merge_to target="a-staging"` → `git_command action=pull_rebase`
+**Git:** `git_command action=status` → `git_command action=add files="src/foo.ts"` → `git_command action=push`
 
 ## Development
 

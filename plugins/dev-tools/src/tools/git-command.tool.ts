@@ -189,6 +189,63 @@ function gitLog(count: number): string {
   return result.stdout || 'No commits.';
 }
 
+function gitDiff(target?: string, staged?: boolean): string {
+  const args = ['diff'];
+  if (staged) args.push('--cached');
+  if (target) args.push(target);
+  args.push('--stat');
+
+  const result = git(...args);
+  if (!result.ok) return `Error: ${result.stderr}`;
+  if (!result.stdout) return staged ? 'No staged changes.' : 'No changes.';
+  return result.stdout;
+}
+
+function gitAdd(files: string): string {
+  const paths = files.split(/[,\s]+/).filter(Boolean);
+  if (paths.length === 0) return 'Error: no files specified.';
+
+  const lines: string[] = [];
+  for (const p of paths) {
+    const result = git('add', p);
+    lines.push(result.ok ? `  Added ${p}` : `  Failed: ${p} — ${result.stderr}`);
+  }
+  return lines.join('\n');
+}
+
+function gitRemove(files: string): string {
+  const paths = files.split(/[,\s]+/).filter(Boolean);
+  if (paths.length === 0) return 'Error: no files specified.';
+
+  const lines: string[] = [];
+  for (const p of paths) {
+    const result = git('reset', 'HEAD', p);
+    lines.push(result.ok ? `  Unstaged ${p}` : `  Failed: ${p} — ${result.stderr}`);
+  }
+  return lines.join('\n');
+}
+
+function gitPush(force?: boolean): string {
+  const branch = currentBranch();
+  if (!branch) return 'Error: not on a branch (detached HEAD).';
+
+  const args = ['push', '-u', 'origin', branch];
+  if (force) args.splice(1, 0, '--force-with-lease');
+
+  const result = git(...args);
+  if (!result.ok) return `Push failed: ${result.stderr}`;
+  return result.stderr || result.stdout || `Pushed ${branch} to origin.`;
+}
+
+function gitPull(): string {
+  const branch = currentBranch();
+  if (!branch) return 'Error: not on a branch (detached HEAD).';
+
+  const result = git('pull');
+  if (!result.ok) return `Pull failed: ${result.stderr}`;
+  return result.stdout || 'Already up to date.';
+}
+
 function branchCleanup(): string {
   const branch = currentBranch();
   const mainBranch = git('rev-parse', '--verify', 'main').ok ? 'main' : 'master';
@@ -216,25 +273,41 @@ export function registerGitCommandTool(server: McpServer): void {
   defineTool(
     server,
     'git_command',
-    'Git workflow shortcuts: status, stash/stash_pop/stash_list, switch (create/switch branch), merge_to, pull_rebase, rebase, cherry_pick, reset_soft, fetch, log, branch_cleanup.',
+    'Git workflow shortcuts: status, diff, log, add, remove (unstage), stash/stash_pop/stash_list, switch, merge_to, pull, pull_rebase, push, rebase, cherry_pick, reset_soft, fetch, branch_cleanup.',
     {
       action: z.enum([
-        'status', 'stash', 'stash_pop', 'stash_list', 'switch',
-        'merge_to', 'pull_rebase', 'rebase', 'cherry_pick',
-        'reset_soft', 'fetch', 'log', 'branch_cleanup',
+        'status', 'diff', 'log', 'add', 'remove',
+        'stash', 'stash_pop', 'stash_list', 'switch',
+        'merge_to', 'pull', 'pull_rebase', 'push', 'rebase', 'cherry_pick',
+        'reset_soft', 'fetch', 'branch_cleanup',
       ]).describe(
-        'status=branch+changes, stash=save WIP, stash_pop=restore WIP, stash_list=list stashes, switch=checkout/create branch, merge_to=merge current→target, pull_rebase=pull --rebase, rebase=onto origin branch, cherry_pick=pick commit, reset_soft=undo N commits (keep staged), fetch=fetch all remotes, log=recent commits, branch_cleanup=delete merged'
+        'status=branch+changes, diff=show changes (stat), log=recent commits, add=stage files, remove=unstage files, stash=save WIP, stash_pop=restore, stash_list=list, switch=checkout/create branch, merge_to=merge current→target, pull=pull from remote, pull_rebase=pull --rebase, push=push to remote, rebase=onto origin branch, cherry_pick=pick commit, reset_soft=undo N commits (keep staged), fetch=fetch all remotes, branch_cleanup=delete merged'
       ),
-      target: z.string().optional().describe('Branch name for merge_to, rebase, or switch'),
+      target: z.string().optional().describe('Branch name for merge_to, rebase, switch, or diff (e.g. main...HEAD)'),
       commit: z.string().optional().describe('Commit hash for cherry_pick'),
       count: z.number().optional().describe('Number of commits for reset_soft (default: 1) or log (default: 10)'),
       create: z.boolean().optional().describe('Create new branch for switch (default: false)'),
+      staged: z.boolean().optional().describe('Show staged changes only for diff (default: false)'),
+      force: z.boolean().optional().describe('Force push with lease for push (default: false)'),
+      files: z.string().optional().describe('File paths for add/remove, comma or space separated'),
       message: z.string().optional().describe('Stash message (optional)'),
     },
     async (input) => {
       const action = input.action as string;
 
       if (action === 'status') return textResult(gitStatus());
+      if (action === 'diff') return textResult(gitDiff(input.target as string | undefined, input.staged as boolean | undefined));
+      if (action === 'log') return textResult(gitLog((input.count as number) || 10));
+
+      if (action === 'add') {
+        if (!input.files) return errorResult('add requires files parameter.');
+        return textResult(gitAdd(input.files as string));
+      }
+      if (action === 'remove') {
+        if (!input.files) return errorResult('remove requires files parameter.');
+        return textResult(gitRemove(input.files as string));
+      }
+
       if (action === 'stash') return textResult(gitStash(false, input.message as string | undefined));
       if (action === 'stash_pop') return textResult(gitStash(true));
       if (action === 'stash_list') return textResult(gitStashList());
@@ -249,7 +322,9 @@ export function registerGitCommandTool(server: McpServer): void {
         return textResult(mergeTo(input.target as string));
       }
 
+      if (action === 'pull') return textResult(gitPull());
       if (action === 'pull_rebase') return textResult(pullRebase());
+      if (action === 'push') return textResult(gitPush(input.force as boolean | undefined));
 
       if (action === 'rebase') {
         return textResult(rebase((input.target as string) || 'main'));
@@ -265,7 +340,6 @@ export function registerGitCommandTool(server: McpServer): void {
       }
 
       if (action === 'fetch') return textResult(gitFetch());
-      if (action === 'log') return textResult(gitLog((input.count as number) || 10));
       if (action === 'branch_cleanup') return textResult(branchCleanup());
 
       return errorResult('Unknown action.');

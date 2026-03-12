@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
 import { git, currentBranch } from '../shared/git-helper.js';
 
-function mergeTo(target: string): string {
+function mergeTo(target: string, push?: boolean): string {
   const branch = currentBranch();
   if (!branch) return 'Error: not on a branch (detached HEAD).';
   if (branch === target) return `Already on ${target}.`;
@@ -31,6 +31,16 @@ function mergeTo(target: string): string {
     return `Merge conflict. Aborted and returned to ${branch}.\n${merge.stderr}`;
   }
   lines.push(`Merged ${branch} into ${target}`);
+
+  // Push target branch to origin
+  if (push) {
+    const pushResult = git('push', '-u', 'origin', target);
+    if (!pushResult.ok) {
+      lines.push(`Push failed: ${pushResult.stderr}`);
+    } else {
+      lines.push(`Pushed ${target} to origin`);
+    }
+  }
 
   // Switch back
   git('checkout', branch);
@@ -356,13 +366,14 @@ export function registerGitCommandTool(server: McpServer): void {
         'merge_to', 'pull', 'pull_rebase', 'push', 'rebase', 'cherry_pick',
         'tag', 'show', 'reset_soft', 'fetch', 'branch_cleanup',
       ]).describe(
-        'status=branch+changes, diff=show changes (stat), log=recent commits, add=stage files, remove=unstage files, commit=commit staged (or add+commit with files), amend=amend last commit, stash=save WIP, stash_pop=restore, stash_list=list, switch=checkout/create branch, branch_list=list branches, merge_to=merge current→target, pull=pull from remote, pull_rebase=pull --rebase, push=push to remote, rebase=onto origin branch, cherry_pick=pick commit, tag=create/list/delete tags, show=show commit details, reset_soft=undo N commits (keep staged), fetch=fetch all remotes, branch_cleanup=delete merged'
+        'status=branch+changes, diff=show changes (stat), log=recent commits, add=stage files, remove=unstage files, commit=commit staged (or add+commit with files), amend=amend last commit, stash=save WIP, stash_pop=restore, stash_list=list, switch=checkout/create branch, branch_list=list branches, merge_to=merge current→target (push=true to push target), pull=pull from remote, pull_rebase=pull --rebase, push=push to remote, rebase=onto origin branch, cherry_pick=pick commit, tag=create/list/delete tags, show=show commit details, reset_soft=undo N commits (keep staged), fetch=fetch all remotes, branch_cleanup=delete merged'
       ),
       target: z.string().optional().describe('Branch name for merge_to, rebase, switch, diff, or commit ref for show'),
       commit: z.string().optional().describe('Commit hash for cherry_pick or show'),
       count: z.number().optional().describe('Number of commits for reset_soft (default: 1) or log (default: 10)'),
       create: z.boolean().optional().describe('Create new branch for switch (default: false)'),
       staged: z.boolean().optional().describe('Show staged changes only for diff (default: false)'),
+      push: z.boolean().optional().describe('Push target branch after merge_to (default: false)'),
       force: z.boolean().optional().describe('Force push with lease for push (default: false)'),
       all: z.boolean().optional().describe('Include remote branches for branch_list (default: false)'),
       delete: z.boolean().optional().describe('Delete tag for tag action (default: false)'),
@@ -404,7 +415,7 @@ export function registerGitCommandTool(server: McpServer): void {
 
       if (action === 'merge_to') {
         if (!input.target) return errorResult('merge_to requires target branch name.');
-        return textResult(mergeTo(input.target as string));
+        return textResult(mergeTo(input.target as string, input.push as boolean | undefined));
       }
 
       if (action === 'pull') return textResult(gitPull());

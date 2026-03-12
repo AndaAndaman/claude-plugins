@@ -57,30 +57,29 @@ Look up the correct branch from the skill's Branch Conventions table:
 
 ### 3. Check working tree
 
-Run `Bash` to check for uncommitted changes:
-```bash
-git status --porcelain
+```
+git_command action="status"
 ```
 
 If dirty:
 - Show what's uncommitted
 - Ask: "You have uncommitted changes. Commit first, stash, or abort?"
-- If commit: help commit, then continue
-- If stash: `git stash`, continue (remind to pop later)
+- If commit: help commit with `git_command action="commit"`, then continue
+- If stash: `git_command action="stash"`, continue (remind to pop later)
 - If abort: stop
 
 ### 4. Push current branch to origin
 
 Before merging, push the current branch so origin is up to date:
 
-```bash
-git push -u origin HEAD
+```
+git_command action="push"
 ```
 
-### 5. Merge to environment branch
+### 5. Merge and push to environment branch
 
 ```
-git_command action="merge_to" target="<resolved-branch>"
+git_command action="merge_to" target="<resolved-branch>" push=true
 ```
 
 If conflict:

@@ -189,7 +189,7 @@ Git workflow shortcuts with safety guardrails.
 | `stash_list` | — | List stashes |
 | `switch` | `target`, `create?` | Checkout or create branch |
 | `branch_list` | `all?` | List branches (-vv, optionally include remotes) |
-| `merge_to` | `target` (required) | Merge current branch → target, return |
+| `merge_to` | `target` (required), `push?` | Merge current → target, optionally push target to origin |
 | `pull` | — | Pull from remote |
 | `pull_rebase` | — | Pull with rebase |
 | `push` | `force?` | Push to origin (force uses --force-with-lease) |

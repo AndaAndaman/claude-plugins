@@ -43,7 +43,7 @@ Available MCP tools for AWS operations:
 
 *Jenkins:* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` (target + params) -> \`jenkins_status\` (monitor) -> \`jenkins_abort\` (if needed)
 
-*Git:* \`git_command\` action=status | action=diff | action=log count=5 | action=add files="src/foo.ts" | action=commit message="feat: add feature" files="src/foo.ts" | action=amend message="fix: typo" | action=branch_list all=true | action=tag target="v1.0.0" | action=show commit="abc123" | action=switch target="feature" create=true | action=pull | action=push | action=merge_to target="staging"
+*Git:* \`git_command\` action=status | action=diff | action=log count=5 | action=add files="src/foo.ts" | action=commit message="feat: add feature" files="src/foo.ts" | action=amend message="fix: typo" | action=branch_list all=true | action=tag target="v1.0.0" | action=show commit="abc123" | action=switch target="feature" create=true | action=pull | action=push | action=merge_to target="staging" push=true
 
 *Worktree:* \`git_worktree\` action=list | action=add path="../feature-branch" branch="feature" | action=remove path="../feature-branch"
 

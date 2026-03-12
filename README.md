@@ -1,14 +1,14 @@
 # FlowAccount Dev Tools - Claude Code Plugins
 
-A plugin marketplace for Claude Code with development tools designed for FlowAccount developers.
+A plugin marketplace for Claude Code, built for FlowAccount developers who want to ship faster without cutting corners.
 
 ## Quick Start
 
 ```bash
-# Add marketplace
+# Add the marketplace
 /plugin marketplace add AndaAndaman/claude-plugins
 
-# Install plugins
+# Pick what you need
 /plugin install ask-before-code@flowaccount-dev-tools
 /plugin install quick-wins@flowaccount-dev-tools
 /plugin install md-to-skill@flowaccount-dev-tools
@@ -16,9 +16,9 @@ A plugin marketplace for Claude Code with development tools designed for FlowAcc
 /plugin install dev-tools@flowaccount-dev-tools
 ```
 
-Or test temporarily:
+Want to try before you commit?
 ```bash
-claude --plugin-dir ./plugins/md-to-skill
+claude --plugin-dir ./plugins/dev-tools
 ```
 
 ## Plugins
@@ -27,182 +27,122 @@ claude --plugin-dir ./plugins/md-to-skill
 
 ### ask-before-code (v0.4.2)
 
-**Problem:** Developers start coding before fully understanding the requirements. Hours get wasted building the wrong thing, then reworking it after clarification.
+Ever spent two hours building a feature only to hear "that's not what I meant"? Yeah, us too.
 
-**Solution:** Catches vague or incomplete requests early and gathers what's missing through structured questions — before any code gets written.
+This plugin catches vague requests early. The Clarity Guardian agent watches your conversation and steps in when something important is missing — target module, who's affected, what "done" looks like. It asks 2-3 focused questions, you align on scope, then you code with confidence.
 
-**How it works:**
-
-The Clarity Guardian agent monitors your conversation. When it detects a request missing essential context (target module, affected users, success criteria, edge cases), it steps in with focused questions. You stay in control — skip clarification when context is already clear.
+Not a gatekeeper — a safety net. Skip it when you already know what you're doing.
 
 **Commands:**
-- `/clarify [topic]` — Gather requirements with interactive Q&A. Identifies request type (feature/bug/improvement), checks for gaps, asks 2-3 targeted questions, then outputs a confirmed action plan with acceptance criteria.
-
-**Components:**
-| Component | Role |
-|-----------|------|
-| Clarity Guardian agent | Detects vague requests, triggers proactively |
-| `/clarify` command | Manual requirement gathering |
-| request-clarification skill | Core methodology for systematic question design |
+- `/clarify [topic]` — Start a quick requirements Q&A. Gets you from "add a report feature" to a clear action plan with acceptance criteria.
 
 ---
 
 ### quick-wins (v0.3.5)
 
-**Problem:** Small code quality issues accumulate silently — unused imports, `any` types, missing error handling, outdated syntax. Each one is trivial alone, but together they become technical debt that slows the team down.
+Small issues pile up quietly — an `any` type here, a missing null check there, some pre-ES2020 syntax nobody updated. Each one takes a minute to fix, but nobody notices them until the codebase feels heavy.
 
-**Solution:** Automatically identifies 1-5 minute improvements after you finish a task, right when the code is fresh in your mind.
-
-**How it works:**
-
-A Stop hook fires when you complete a task. It evaluates whether a quality scan would be useful (skips trivial changes or urgent fixes). When triggered, the Quick Wins Scanner agent reads the affected files and produces a prioritized list of improvements with effort estimates.
+This plugin notices. After you finish a task, a Stop hook evaluates whether a quality scan makes sense (it won't bug you for a one-line config change). When it triggers, the scanner reads your changed files and hands you a prioritized list of 1-5 minute fixes.
 
 **Commands:**
-- `/quick-wins [path]` — Scan files or directories for improvement opportunities. Returns a ranked list with categories (type safety, modern syntax, error handling, code organization) and estimated fix time.
-- `/apply-win [description]` — Apply a specific improvement. Shows before/after diff for confirmation before making changes.
+- `/quick-wins [path]` — Scan files for easy improvements. Shows category, effort estimate, and what to fix.
+- `/apply-win [description]` — Apply a specific fix with a before/after preview.
 
-**Technology coverage:**
-
-| Stack | What it catches |
-|-------|----------------|
-| TypeScript/JavaScript | Missing types, `any` usage, arrow functions, optional chaining, async/await patterns |
-| Angular | OnPush change detection, lifecycle hook order, RxJS operator choices, template improvements |
-| .NET/C# | Async patterns, LINQ opportunities, resource management, modern C# syntax |
-
-**Components:**
-| Component | Role |
-|-----------|------|
-| Quick Wins Scanner agent | Scans code and produces prioritized improvement list |
-| `/quick-wins` command | On-demand scanning |
-| `/apply-win` command | Apply individual improvements with preview |
-| Stop hook | Triggers scan after task completion |
-| code-quality-checks skill | Defines what qualifies as a "quick win" |
-| refactoring-patterns skill | Before/after examples for TypeScript, Angular, .NET |
+**What it catches:** missing types, `any` usage, modern syntax opportunities, error handling gaps, Angular change detection, .NET async patterns, and more across TypeScript, Angular, and .NET/C#.
 
 ---
 
-### md-to-skill (v0.8.7)
+### md-to-skill (v0.8.8)
 
-**Problem:** Valuable markdown content — LLM exports, documentation, architecture decisions — sits in files that Claude never sees. Meanwhile, the skill system provides a structured way to give Claude reusable knowledge, but creating skills manually is tedious.
+You've got great markdown sitting around — LLM exports, architecture docs, team playbooks — but Claude never sees it. Meanwhile, Claude's skill system is powerful but nobody wants to hand-craft YAML frontmatter for every piece of knowledge.
 
-**Solution:** Converts markdown files into organized Claude skills, with a Stop hook that automatically detects high-confidence skill candidates using multi-signal confidence scoring.
-
-**How it works:**
-
-When a session ends, the Stop hook scans for new markdown files written during the session. Each file is scored across 6 signals (instructional language, heading structure, content depth, code blocks, sections, lists) to produce a confidence score. Files scoring above threshold are suggested for conversion. The conversion pipeline analyzes structure, extracts code blocks, splits topics into references, generates frontmatter, and validates quality.
+This plugin bridges the gap. Point it at a markdown file and it produces a clean Claude skill: frontmatter, progressive disclosure structure, code examples extracted, quality validated. A Stop hook even watches for new markdown files and suggests the best candidates automatically (scored across 6 signals).
 
 **Commands:**
-
-| Command | Purpose |
-|---------|---------|
-| `/convert-to-skill <file>` | Convert a markdown file directly into a skill |
-| `/learn-skill [dir]` | Batch scan directory for skill candidates |
-| `/skill-shopping [task]` | Recommend relevant installed skills for your current task |
-
-**Components:**
-| Component | Role |
-|-----------|------|
-| skill-builder agent | Converts markdown into skill structure |
-| Stop hook (md-watch) | Scores new markdown files using 6 weighted signals |
-| markdown-parsing skill | Techniques for parsing markdown structure |
-| skill-structure-patterns skill | Templates and best practices for skill creation |
+- `/convert-to-skill <file>` — Turn one markdown file into a skill.
+- `/learn-skill [dir]` — Batch scan a directory for skill candidates.
+- `/skill-shopping [task]` — "What skills do I already have that could help with this?"
 
 ---
 
 ### feature-sprint (v0.8.2)
 
-**Problem:** Feature implementation either gets under-planned (jump in, hit issues, rework) or over-planned (spend hours on architecture documents nobody reads). The right amount of planning depends on the feature's size, but developers have to make that judgment call themselves.
+Feature work usually goes one of two ways: you jump in and hit unexpected issues, or you spend forever planning before writing a line of code. The right approach depends on the size of the feature — but sizing is its own skill.
 
-**Solution:** A PM agent assesses scope first, then routes to the right-sized workflow automatically — from direct one-line fixes to full parallel team execution with code review.
+This plugin does the sizing for you. A PM agent searches the codebase, counts affected files and modules, and picks the right workflow automatically:
 
-**How it works:**
-
-The PM agent searches the codebase to count affected files and modules, then classifies the feature as tiny/small/medium/large/huge. Each scope level gets a different workflow:
-
-| Scope | Affected | Workflow | Agents |
-|-------|----------|----------|--------|
-| **Tiny** | 1 file, simple change | Lead fixes directly | None |
-| **Small** | 1-2 files | Single implementer | 1 implementer |
-| **Medium** | 2-3 files | Scout finds location, then implementer | Scout + 1 implementer |
-| **Large** | 4+ files, cross-module | Full analysis, parallel implementers, code review | Scout + Guard + Tester + 2-3 implementers + Reviewer |
-| **Huge** | System-wide | Decomposition suggestions, no implementation | PM only (warns and stops) |
+| Scope | What it looks like | What happens |
+|-------|-------------------|--------------|
+| **Tiny** | 1 file, obvious change | Claude fixes it directly |
+| **Small** | 1-2 files | One implementer agent |
+| **Medium** | 2-3 files | Scout finds the spot, then implementer builds it |
+| **Large** | 4+ files, cross-module | Full team: scout, guard, tester, parallel implementers, code review |
+| **Huge** | System-wide | "This is too big — here's how to break it down" |
 
 **Commands:**
-- `/sprint <feature>` — Full-lifecycle development. PM assesses scope, user confirms routing, then agents execute the appropriate workflow.
-- `/sprint-plan <feature>` — Plan only. Produces an implementation brief without writing any code.
-- `/sprint-loop <goal>` — Long-lived development session. Agents stay alive and accumulate context across iterations. User says "done" to teardown.
-
-**Agents:**
-
-| Agent | Role |
-|-------|------|
-| PM | Searches codebase, counts affected files/modules, classifies scope |
-| Scout | Finds target files, identifies patterns to follow, locates related code |
-| Guard | Identifies risks, edge cases, and gotchas that could break the feature |
-| Tester | Defines minimum viable test strategy |
-| Implementer | Executes a work package with exclusive file ownership (2-3 run in parallel for large scope) |
-| Reviewer | Reviews all implementers' code against the brief, checks risk mitigations applied |
+- `/sprint <feature>` — Full lifecycle: scope, plan, implement, review.
+- `/sprint-plan <feature>` — Just the plan, no code changes.
+- `/sprint-loop <goal>` — Long session with agents that stay alive and accumulate context. Say "done" when you're finished.
 
 ---
 
-### dev-tools (v0.9.11)
+### dev-tools (v0.9.12)
 
-**Problem:** Switching between editor and terminal to manage AWS services, trigger Jenkins builds, or refresh SSO credentials breaks flow and requires remembering CLI flags.
+You know the pain: Claude tries to `curl` an API through Bash and the quoting breaks. Or runs `git commit` in a subshell and the message gets mangled. Or you have to spell out AWS CLI flags every single time.
 
-**Solution:** Exposes AWS ECS, SSO, Jenkins CI, Git, and Healthcheck operations as MCP tools that Claude can call directly in natural language.
+This plugin gives Claude **native MCP tools** for git, HTTP, AWS, Jenkins, and health checks. No Bash, no shell escaping, no silent failures. Claude calls `git`, `curl`, and `aws` binaries directly through Node.js `spawnSync` — typed inputs, structured outputs, every time.
 
-**How it works:**
+**17 tools across 6 domains:**
 
-An MCP server provides 17 tools organized by domain. Services are discovered via AWS resource tags, Jenkins targets are configurable per environment (staging/preprod with independent parameter schemas), and all destructive operations have confirm gates (preview by default).
+| Domain | Tools | Highlights |
+|--------|-------|-----------|
+| **Git** | `git_command` | 22 actions: status, diff, log, add, remove, commit, amend, push, pull, stash, switch, branch_list, merge_to, rebase, cherry_pick, tag, show, reset_soft, fetch, and more |
+| **Git Worktree** | `git_worktree` | Create, list, remove, prune worktrees |
+| **HTTP** | `http_request` | GET/POST/PUT/PATCH/DELETE with headers, JSON body, basic auth — replaces Bash curl entirely |
+| **AWS ECS** | `aws_ecs_list`, `aws_ecs_scale`, `aws_ecs_update_service` | List, scale, and update ECS services by tag |
+| **AWS SSO** | `aws_sso_status`, `aws_sso_refresh`, `aws_configure` | Check token expiry, refresh credentials (handles browser login), configure profile |
+| **Jenkins** | `jenkins_configure`, `jenkins_list_targets`, `jenkins_build`, `jenkins_status`, `jenkins_abort`, `jenkins_edit_config` | Full CI lifecycle: configure, trigger, monitor, abort |
+| **Healthcheck** | `healthcheck` | Check endpoints, manage the endpoint list |
 
-**Tools:**
-
-| Domain | Tools | What they do |
-|--------|-------|-------------|
-| AWS ECS | `aws_ecs_list`, `aws_ecs_scale`, `aws_ecs_update_service` | List/scale/update ECS services by tag |
-| AWS SSO | `aws_sso_status`, `aws_sso_refresh` | Check SSO token expiry, refresh credentials |
-| AWS Config | `aws_configure` | View/change AWS profile and tag settings |
-| Jenkins | `jenkins_configure`, `jenkins_list_targets`, `jenkins_build`, `jenkins_status`, `jenkins_abort`, `jenkins_edit_config` | Configure, trigger, monitor, and abort CI builds |
-| Git | `git_command` | status, diff, log, add, remove, commit, amend, stash/pop/list, switch, branch_list, merge_to, pull, pull_rebase, push, rebase, cherry_pick, tag, show, reset_soft, fetch, branch_cleanup |
-| Git Worktree | `git_worktree` | Create, list, remove, and prune worktrees |
-| HTTP | `http_request` | Make HTTP requests (GET/POST/PUT/PATCH/DELETE) with headers, body, auth |
-| Healthcheck | `healthcheck` | Check health of configured endpoints, manage endpoint list |
+**Commands:**
+- `/deploy [target] [env]` — Ship current branch and trigger Jenkins build.
+- `/build [target]` — Trigger a Jenkins build without merging.
 
 ---
 
-## Plugin Status
+## At a Glance
 
-| Plugin | Version | Commands | Agents | Hooks |
-|--------|---------|----------|--------|-------|
-| ask-before-code | 0.4.2 | 1 | 1 | 1 (SessionStart) |
-| quick-wins | 0.3.5 | 2 | 1 | 2 (SessionStart, Stop) |
-| md-to-skill | 0.8.7 | 3 | 1 | 1 (Stop) |
-| feature-sprint | 0.8.2 | 3 | 7 | 1 (SessionStart) |
-| dev-tools | 0.9.11 | 0 | 0 | 1 (SessionStart) |
+| Plugin | Version | What it does |
+|--------|---------|-------------|
+| ask-before-code | 0.4.2 | Catches unclear requirements before you waste time coding |
+| quick-wins | 0.3.5 | Finds 1-5 minute code improvements after you finish a task |
+| md-to-skill | 0.8.8 | Turns markdown files into Claude skills automatically |
+| feature-sprint | 0.8.2 | Right-sizes your workflow from one-liner to full team sprint |
+| dev-tools | 0.9.12 | Native MCP tools for git, HTTP, AWS, Jenkins, health checks |
 
-## FlowAccount Compatibility
+## Works with FlowAccount
 
-All plugins work with both FlowAccount workspaces:
+All plugins are built for both FlowAccount workspaces:
 
-- **flowaccount.workspace** (TypeScript/Angular/Nx)
-- **flowaccount.dotnet.workspace** (.NET/C#)
+- **flowaccount.workspace** — TypeScript, Angular, Nx
+- **flowaccount.dotnet.workspace** — .NET, C#
 
-Respects FlowAccount conventions: `_underscore` prefix, Clean Architecture layers, Nx project boundaries, DDD structure, `flowaccount` component prefix.
+Respects your conventions: `_underscore` prefix, Clean Architecture layers, Nx boundaries, DDD structure, `flowaccount` component prefix.
 
-## Installation Options
+## Installation
 
-**Marketplace** (recommended):
+**From the marketplace** (recommended):
 ```bash
 /plugin marketplace add AndaAndaman/claude-plugins
 /plugin install <plugin-name>@flowaccount-dev-tools
 ```
 
-**Local to project:**
+**Local to a project:**
 ```bash
 cp -r plugins/<plugin-name> /path/to/project/.claude/
 ```
 
-**Global:**
+**Global (all projects):**
 ```bash
 cp -r plugins/<plugin-name> ~/.claude-plugins/
 ```
@@ -210,14 +150,14 @@ cp -r plugins/<plugin-name> ~/.claude-plugins/
 ## Development
 
 ```bash
-# Test a plugin
+# Test a single plugin
 claude --plugin-dir ./plugins/<plugin-name>
 
 # Test multiple together
 claude --plugin-dir ./plugins/ask-before-code --plugin-dir ./plugins/quick-wins
 ```
 
-When modifying plugins, keep versions synchronized between `plugins/<name>/.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`.
+When releasing, keep versions in sync across three files: `plugins/<name>/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and `plugins/<name>/src/main.ts`.
 
 ## License
 

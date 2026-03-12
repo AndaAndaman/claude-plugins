@@ -21,8 +21,8 @@ Available MCP tools for AWS operations:
 - \`jenkins_configure\` - Set Jenkins URL, user, token, environment (staging/preprod)
 - \`jenkins_edit_config\` - View/set/remove/reset per-target default overrides
 - \`jenkins_list_targets\` - Show available build targets with default parameters
-- \`jenkins_build\` - Trigger a build (ui, api, api-report, api-doc, api-profile, open-api, lambda-pdf-preview, lambda-pdf-gen)
-- \`jenkins_status\` - Check build status + console output
+- \`jenkins_build\` - Trigger a build (ui, api, api-report, api-doc, api-profile, open-api, lambda-pdf-preview, lambda-pdf-gen). Automatically resolves queue to build number (blocks up to 90s).
+- \`jenkins_status\` - Check build status + console output. If no URL provided, checks last triggered build.
 - \`jenkins_abort\` - Abort/cancel a running build or queued item
 
 **Git Workflow:**
@@ -42,6 +42,16 @@ Available MCP tools for AWS operations:
 *Jenkins:* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` (target + params) -> \`jenkins_status\` (monitor) -> \`jenkins_abort\` (if needed)
 
 *Post-build verification:* When \`jenkins_status\` shows SUCCESS, **proactively follow up** with: \`healthcheck\` action=check (verify endpoints are healthy) -> \`aws_ecs\` action=describe (check deployment rollout state) -> \`aws_ecs\` action=events (check for errors) -> \`aws_ecs\` action=wait (wait for stable if deployment in progress). This ensures the build actually landed and is serving traffic.
+
+**Background agent for long-running operations:**
+The \`bg-runner\` agent runs dev-tools MCP calls in the background so you can keep working. **Use it for any operation that blocks >30s:**
+- \`jenkins_build\` + \`jenkins_status\` polling (build lifecycle)
+- \`aws_ecs\` action=wait (deployment stability, up to 300s)
+- Post-build verification chain (healthcheck + ECS describe/events/wait)
+- Any future long-polling MCP tool call
+
+**How:** \`Agent(subagent_type="dev-tools:bg-runner", run_in_background=true, prompt="trigger and monitor jenkins build for ui staging")\`
+You will be notified when the background task completes.
 
 *Git:* \`git_command\` action=status | action=diff | action=log count=5 | action=add files="src/foo.ts" | action=commit message="feat: add feature" files="src/foo.ts" | action=amend message="fix: typo" | action=branch_list all=true | action=tag target="v1.0.0" | action=show commit="abc123" | action=switch target="feature" create=true | action=pull | action=push | action=merge_to target="staging" push=true
 

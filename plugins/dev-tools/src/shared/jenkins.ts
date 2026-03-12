@@ -334,21 +334,55 @@ export interface BuildStatus {
   consoleLines: string[];
 }
 
-export function getQueueStatus(queueUrl: string): { buildUrl?: string; waiting: boolean; reason?: string } {
+// ---------- Last Build State ----------
+
+export interface LastBuild {
+  target: string;
+  queueUrl: string;
+  buildUrl?: string;
+  buildNumber?: number;
+  timestamp: number;
+}
+
+let _lastBuild: LastBuild | null = null;
+
+export function getLastBuild(): LastBuild | null { return _lastBuild; }
+
+export function setLastBuild(info: LastBuild): void { _lastBuild = info; }
+
+// ---------- Queue Resolution ----------
+
+export function getQueueStatus(queueUrl: string): { buildUrl?: string; cancelled?: boolean; waiting: boolean; reason?: string } {
   const config = loadJenkinsConfig();
   const base = queueUrl.replace(/\/$/, '');
-  const { body } = jenkinsGet(`${base}/api/json`, config);
+  const { body } = jenkinsGet(`${base}/api/json?tree=cancelled,executable[url,number]`, config);
 
   try {
     const data = JSON.parse(body);
-    const execUrl = data?.executable?.url;
-    if (execUrl) {
-      return { buildUrl: execUrl, waiting: false };
+    if (data?.cancelled) {
+      return { waiting: false, cancelled: true, reason: 'Build was cancelled' };
+    }
+    const exec = data?.executable;
+    if (exec?.url) {
+      return { buildUrl: exec.url, waiting: false };
     }
     return { waiting: true, reason: data?.why || 'Waiting in queue' };
   } catch {
     return { waiting: true, reason: 'Cannot parse queue response' };
   }
+}
+
+/** Poll queue URL until it resolves to a build URL or times out. */
+export async function resolveQueue(queueUrl: string, timeoutMs = 90000): Promise<{ buildUrl?: string; cancelled?: boolean; timedOut?: boolean; reason?: string }> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const q = getQueueStatus(queueUrl);
+    if (q.buildUrl) return { buildUrl: q.buildUrl };
+    if (q.cancelled) return { cancelled: true, reason: q.reason };
+    if (!q.waiting) return { reason: q.reason };
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  return { timedOut: true, reason: `Queue not resolved after ${Math.round(timeoutMs / 1000)}s` };
 }
 
 export function abortBuild(url: string): { success: boolean; error?: string } {

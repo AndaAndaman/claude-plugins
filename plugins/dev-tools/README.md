@@ -137,7 +137,7 @@ Show available build targets with their default parameters.
 
 #### `jenkins_build`
 
-Trigger a Jenkins build.
+Trigger a Jenkins build. Automatically resolves queue to build number (polls up to 90s).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -147,7 +147,12 @@ Trigger a Jenkins build.
 
 #### `jenkins_status`
 
-Check build status and console output for a running or completed build.
+Check build status and console output. If no URL provided, checks the last triggered build.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `url` | string | No | Build or queue URL (omit to check last build) |
+| `lines` | number | No | Console lines to show (default: 20) |
 
 #### `jenkins_abort`
 
@@ -241,9 +246,11 @@ Check health of configured endpoints, or manage the endpoint list.
 
 **AWS:** `aws_sso_status` → `aws_sso_refresh` (if expired) → `aws_ecs action=search pattern="my-service"` → `aws_ecs action=describe cluster="..." service="..."` → `aws_ecs action=update cluster="..." service="..." desiredCount=1 confirm=true`
 
-**Jenkins manual:** `jenkins_configure` (set token once) → `jenkins_list_targets` → `jenkins_build` → `jenkins_status` → `jenkins_abort` (if needed)
+**Jenkins manual:** `jenkins_configure` (set token once) → `jenkins_list_targets` → `jenkins_build` → `jenkins_status` (no URL needed) → `jenkins_abort` (if needed)
 
 **Git:** `git_command action=status` → `git_command action=add files="src/foo.ts"` → `git_command action=push`
+
+**Background operations:** Long-running tools (build monitoring, ECS wait) should be run via the `bg-runner` agent in background so you can keep working. Claude handles this automatically.
 
 ## Development
 
@@ -261,6 +268,8 @@ npm run build
 dev-tools/
 ├── .claude-plugin/
 │   └── plugin.json
+├── agents/
+│   └── bg-runner.md           # Background agent for long-running MCP ops
 ├── commands/
 │   ├── deploy.md              # /deploy command
 │   └── build.md               # /build command

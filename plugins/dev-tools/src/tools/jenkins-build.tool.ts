@@ -1,10 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
-import { BUILD_TARGETS, triggerBuild, getQueueStatus, getBuildStatus, loadJenkinsConfig, getEffectiveDefaults } from '../shared/jenkins.js';
-
-// Only show these key params in build summary
-const SUMMARY_KEYS = ['COMMIT_HASH', 'BUILD_BRANCH', 'BranchName', 'BUILD_SITE', 'SITE', 'STAGE', 'SERVICE_NAME', 'configuration'];
+import { BUILD_TARGETS, triggerBuild, resolveQueue, getBuildStatus, loadJenkinsConfig, getEffectiveDefaults, setLastBuild } from '../shared/jenkins.js';
 
 export const registerJenkinsBuildTool = (server: McpServer): void => {
   defineTool(
@@ -14,7 +11,6 @@ export const registerJenkinsBuildTool = (server: McpServer): void => {
     {
       target: z.string().describe(`Build target: ${Object.keys(BUILD_TARGETS).join(', ')}`),
       params: z.string().optional().describe('JSON overrides, e.g. {"COMMIT_HASH":"main"}'),
-      watch: z.coerce.boolean().optional().describe('Poll until build starts (boolean, default: false)'),
     },
     async (input) => {
       const target = input.target as string;
@@ -41,7 +37,6 @@ export const registerJenkinsBuildTool = (server: McpServer): void => {
         '',
       ];
 
-      // Show all params that will be sent
       for (const [k, v] of Object.entries(merged)) {
         const isOverride = k in params;
         lines.push(`  ${k}: ${v || '""'}${isOverride ? ' (override)' : ''}`);
@@ -56,25 +51,31 @@ export const registerJenkinsBuildTool = (server: McpServer): void => {
 
       lines.push(`Queued: ${result.queueUrl}`);
 
-      if (input.watch === true && result.queueUrl) {
-        const maxWait = 60000;
-        const start = Date.now();
+      // Store last build immediately
+      setLastBuild({ target, queueUrl: result.queueUrl!, timestamp: Date.now() });
 
-        while (Date.now() - start < maxWait) {
-          const q = getQueueStatus(result.queueUrl);
-          if (q.buildUrl) {
-            const status = getBuildStatus(q.buildUrl, 10);
-            lines.push(`Build #${status.number || '?'} ${status.building ? 'BUILDING' : status.result || 'UNKNOWN'} ${q.buildUrl}`);
-            if (status.consoleLines.length > 0) {
-              lines.push('--- console (last 10) ---');
-              lines.push(...status.consoleLines);
-            }
-            return textResult(lines.join('\n'));
+      // Resolve queue → build URL (blocks, but Claude should run this in background agent)
+      if (result.queueUrl) {
+        lines.push('Waiting for build to start...');
+        const resolved = await resolveQueue(result.queueUrl);
+
+        if (resolved.buildUrl) {
+          const status = getBuildStatus(resolved.buildUrl, 10);
+          const buildNum = status.number || '?';
+          const state = status.building ? 'BUILDING' : status.result || 'UNKNOWN';
+
+          setLastBuild({ target, queueUrl: result.queueUrl!, buildUrl: resolved.buildUrl, buildNumber: status.number ?? undefined, timestamp: Date.now() });
+
+          lines.push(`Build #${buildNum} ${state} ${resolved.buildUrl}`);
+          if (status.consoleLines.length > 0) {
+            lines.push('--- console (last 10) ---');
+            lines.push(...status.consoleLines);
           }
-          await new Promise(r => setTimeout(r, 3000));
+        } else if (resolved.cancelled) {
+          lines.push('Build was cancelled in queue.');
+        } else {
+          lines.push(`${resolved.reason}. Use jenkins_status to check later.`);
         }
-
-        lines.push('Timed out. Use jenkins_status with queue URL.');
       }
 
       return textResult(lines.join('\n'));

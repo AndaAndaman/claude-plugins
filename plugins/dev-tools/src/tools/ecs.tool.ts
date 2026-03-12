@@ -456,12 +456,10 @@ async function actionWait(input: Record<string, unknown>): Promise<string> {
       lastStatus = statusLine;
     }
 
-    // Check for failed deployment
     if (primary?.rolloutState === 'FAILED') {
       return `Deployment FAILED for ${service}.\n${statusLine}`;
     }
 
-    // Poll every 10 seconds
     await new Promise((resolve) => setTimeout(resolve, 10000));
   }
 

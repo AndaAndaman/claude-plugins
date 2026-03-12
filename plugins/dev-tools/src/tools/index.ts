@@ -14,6 +14,7 @@ import { registerJenkinsEditConfigTool } from './jenkins-edit-config.tool.js';
 import { registerGitCommandTool } from './git-command.tool.js';
 import { registerGitWorktreeTool } from './git-worktree.tool.js';
 import { registerHealthcheckTool } from './healthcheck.tool.js';
+import { registerHttpRequestTool } from './http-request.tool.js';
 
 export function registerTools(server: McpServer): void {
   registerConfigureTool(server);
@@ -31,4 +32,5 @@ export function registerTools(server: McpServer): void {
   registerGitCommandTool(server);
   registerGitWorktreeTool(server);
   registerHealthcheckTool(server);
+  registerHttpRequestTool(server);
 }

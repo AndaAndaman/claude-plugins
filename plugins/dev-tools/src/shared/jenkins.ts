@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { spawnSync } from 'node:child_process';
+import { httpRequest } from './http.js';
 
 // ---------- Config ----------
 
@@ -248,46 +248,32 @@ export function resolveJobPath(target: BuildTarget, config: JenkinsConfig): stri
 
 // ---------- HTTP helpers ----------
 
-function runCurl(args: string[], timeout = 30000): { raw: string; ok: boolean } {
-  const result = spawnSync('curl', args, {
-    encoding: 'utf8',
-    maxBuffer: 5 * 1024 * 1024,
-    timeout,
-  });
-  return { raw: result.stdout ?? '', ok: result.status === 0 };
+function jenkinsAuth(config: JenkinsConfig): string {
+  return `${config.user}:${config.token}`;
 }
 
-function curlJson(url: string, config: JenkinsConfig, method = 'GET', data?: string[]): { status: number; body: string; headers: string } {
-  const auth = `${config.user}:${config.token}`;
-  const args = ['-s', '-i', '-u', auth];
+function jenkinsGet(url: string, config: JenkinsConfig, timeout = 30000): { status: number; body: string } {
+  const resp = httpRequest(url, { auth: jenkinsAuth(config), timeout, followRedirects: false });
+  return { status: resp.status, body: resp.body };
+}
 
-  if (method === 'POST') args.push('-X', 'POST');
-  if (data) {
-    for (const d of data) {
-      args.push('--data', d);
-    }
-  }
-  args.push(url);
-
-  const { raw, ok } = runCurl(args);
-  if (!ok && !raw) {
-    return { status: 0, body: 'curl failed', headers: '' };
-  }
-
-  // Split headers and body
-  const parts = raw.split(/\r?\n\r?\n/);
-  const headers = parts[0] || '';
-  const body = parts.slice(1).join('\n\n');
-  const statusMatch = headers.match(/HTTP\/[\d.]+ (\d+)/);
-  const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
-
-  return { status, body, headers };
+function jenkinsPost(url: string, config: JenkinsConfig, opts?: { headers?: Record<string, string>; body?: string; timeout?: number }): { status: number; body: string; headers: Record<string, string> } {
+  const resp = httpRequest(url, {
+    method: 'POST',
+    auth: jenkinsAuth(config),
+    headers: opts?.headers,
+    body: opts?.body,
+    timeout: opts?.timeout ?? 30000,
+    followRedirects: false,
+    rawBody: true,
+  });
+  return { status: resp.status, body: resp.body, headers: resp.headers };
 }
 
 // ---------- Jenkins API ----------
 
 function getCrumb(config: JenkinsConfig): string | null {
-  const { body } = curlJson(`${config.url}/crumbIssuer/api/json`, config);
+  const { body } = jenkinsGet(`${config.url}/crumbIssuer/api/json`, config);
   try {
     const data = JSON.parse(body);
     return data.crumb || null;
@@ -319,34 +305,25 @@ export function triggerBuild(target: string, params: Record<string, string>): Tr
   const jobPath = resolveJobPath(bt, config);
   const url = `${config.url}/job/${jobPath}/buildWithParameters`;
 
-  // Build data params (URL-encode values to handle special characters)
-  const data = Object.entries(merged).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`);
+  // Build form body (URL-encoded)
+  const formBody = Object.entries(merged)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
 
   // Get CSRF crumb
   const crumb = getCrumb(config);
+  const headers: Record<string, string> = { 'Content-Type': 'application/x-www-form-urlencoded' };
+  if (crumb) headers['Jenkins-Crumb'] = crumb;
 
-  // Trigger
-  const args = ['-s', '-i', '-u', `${config.user}:${config.token}`];
-  if (crumb) args.push('-H', `Jenkins-Crumb: ${crumb}`);
-  args.push('-X', 'POST');
-  for (const d of data) {
-    args.push('--data', d);
-  }
-  args.push(url);
-
-  const { raw, ok } = runCurl(args);
-  if (!ok && !raw) {
-    return { success: false, error: 'curl failed' };
-  }
+  const resp = jenkinsPost(url, config, { headers, body: formBody });
 
   // Extract Location header for queue URL
-  const locMatch = raw.match(/Location:\s*(\S+)/i);
-  if (!locMatch) {
-    const statusMatch = raw.match(/HTTP\/[\d.]+ (\d+)/);
-    return { success: false, error: `Failed to trigger build (HTTP ${statusMatch?.[1] || '?'}). Check Jenkins URL/token.` };
+  const queueUrl = resp.headers['location'];
+  if (!queueUrl) {
+    return { success: false, error: `Failed to trigger build (HTTP ${resp.status}). Check Jenkins URL/token.` };
   }
 
-  return { success: true, queueUrl: locMatch[1].trim() };
+  return { success: true, queueUrl: queueUrl.trim() };
 }
 
 export interface BuildStatus {
@@ -360,7 +337,7 @@ export interface BuildStatus {
 export function getQueueStatus(queueUrl: string): { buildUrl?: string; waiting: boolean; reason?: string } {
   const config = loadJenkinsConfig();
   const base = queueUrl.replace(/\/$/, '');
-  const { body } = curlJson(`${base}/api/json`, config);
+  const { body } = jenkinsGet(`${base}/api/json`, config);
 
   try {
     const data = JSON.parse(body);
@@ -387,20 +364,14 @@ export function abortBuild(url: string): { success: boolean; error?: string } {
     : `${url.replace(/\/$/, '')}/stop`;
 
   const crumb = getCrumb(config);
-  const args = ['-s', '-i', '-u', `${config.user}:${config.token}`];
-  if (crumb) args.push('-H', `Jenkins-Crumb: ${crumb}`);
-  args.push('-X', 'POST', stopUrl);
+  const headers: Record<string, string> = {};
+  if (crumb) headers['Jenkins-Crumb'] = crumb;
 
-  const { raw, ok } = runCurl(args, 15000);
-  if (!ok && !raw) {
-    return { success: false, error: 'curl failed' };
-  }
-  const statusMatch = raw.match(/HTTP\/[\d.]+ (\d+)/);
-  const status = statusMatch ? parseInt(statusMatch[1], 10) : 0;
-  if (status >= 200 && status < 400) {
+  const resp = jenkinsPost(stopUrl, config, { headers, timeout: 15000 });
+  if (resp.status >= 200 && resp.status < 400) {
     return { success: true };
   }
-  return { success: false, error: `HTTP ${status} from Jenkins` };
+  return { success: false, error: `HTTP ${resp.status} from Jenkins` };
 }
 
 export function getBuildStatus(buildUrl: string, consoleLines = 20): BuildStatus {
@@ -408,7 +379,7 @@ export function getBuildStatus(buildUrl: string, consoleLines = 20): BuildStatus
   const base = buildUrl.replace(/\/$/, '');
 
   // Get build JSON
-  const { body: buildBody } = curlJson(`${base}/api/json`, config);
+  const { body: buildBody } = jenkinsGet(`${base}/api/json`, config);
   let building = true;
   let result: string | null = null;
   let number: number | null = null;
@@ -422,9 +393,9 @@ export function getBuildStatus(buildUrl: string, consoleLines = 20): BuildStatus
 
   // Get console output
   let lines: string[] = [];
-  const consoleResult = runCurl(['-s', '-u', `${config.user}:${config.token}`, `${base}/consoleText`], 15000);
-  if (consoleResult.raw) {
-    const allLines = consoleResult.raw.split('\n');
+  const consoleResp = jenkinsGet(`${base}/consoleText`, config, 15000);
+  if (consoleResp.body) {
+    const allLines = consoleResp.body.split('\n');
     lines = allLines.slice(-consoleLines);
   }
 

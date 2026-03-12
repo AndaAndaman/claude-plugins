@@ -198,6 +198,24 @@ Git workflow shortcuts with safety guardrails.
 
 ---
 
+### HTTP
+
+#### `http_request`
+
+General-purpose HTTP client. Supports all methods, custom headers, request body, basic auth, and follows redirects. JSON responses are auto-pretty-printed.
+
+| Parameter | Description |
+|-----------|-------------|
+| `url` (required) | Request URL |
+| `method` | GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS (default: GET) |
+| `headers` | JSON object, e.g. `{"Authorization": "Bearer token"}` |
+| `body` | Request body (auto-sets Content-Type: application/json) |
+| `auth` | Basic auth as `"user:password"` |
+| `timeout` | Timeout in ms (default: 30000) |
+| `show_headers` | Include response headers in output (default: false) |
+
+---
+
 ### Healthcheck
 
 #### `healthcheck`

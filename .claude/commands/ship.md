@@ -21,6 +21,8 @@ argument-hint: "[patch|minor|major|x.y.z] [commit message]"
 
 Bump version, commit, and push in one step.
 
+**IMPORTANT:** Execute steps sequentially. Do NOT skip steps. Do NOT combine steps. Complete each step fully before moving to the next.
+
 ## Workflow
 
 ### Step 1: Determine version
@@ -33,17 +35,22 @@ Bump version, commit, and push in one step.
 ### Step 2: Find plugin to bump
 
 Look at the git diff to determine which plugin(s) changed:
+- Run `git diff --name-only` and `git diff --cached --name-only` to see all changes
 - Check `plugins/*/src/` for modified files
 - Read the plugin's `.claude-plugin/plugin.json` for current version
 - Also check `.claude-plugin/marketplace.json` for the marketplace entry
 
 If changes span multiple plugins, ask the user which one to bump.
 
-### Step 3: Bump version
+### Step 3: Bump version in ALL version files
 
-Update both files:
+**MANDATORY** — Update ALL THREE files. Missing any causes version drift:
+
 1. `plugins/<name>/.claude-plugin/plugin.json` — `version` field
 2. `.claude-plugin/marketplace.json` — matching plugin's `version` field
+3. `plugins/<name>/src/main.ts` — version string in `new McpServer(...)` (MCP plugins only)
+
+**Verify:** After editing, read all three files back to confirm versions match.
 
 ### Step 4: Build (if applicable)
 
@@ -52,25 +59,42 @@ If the plugin has a build step (check for `package.json` with `build` script):
 cd plugins/<name> && npm run build
 ```
 
+**MANDATORY:** Build MUST happen AFTER version bump so the dist includes the new version.
+
+Verify the build succeeds (exit code 0). If it fails, fix the error before continuing.
+
 ### Step 5: Update README
 
-If the changes are significant (new features, removed dependencies, architecture changes), update the plugin's README or the root `README.md` to reflect the changes:
-- Update feature descriptions, tool lists, or usage examples that no longer match
-- Update dependency/requirement sections (e.g., if CLI dependency was removed)
+Evaluate whether README updates are needed:
+
+**MUST update** when:
+- New tools/commands/agents added
+- Tools/commands removed or renamed
+- Tool parameters changed
+- New workflows or usage patterns
+
+**Skip** when:
+- Bug fixes with no user-facing changes
+- Internal refactoring
+- Config tweaks
+
+When updating:
+- Update the root `README.md` tool lists, descriptions, and usage examples
+- Update session-start hook if it documents available tools
 - Keep changes minimal — only update sections affected by the code changes
-- Skip this step for trivial patches (bug fixes, config tweaks)
 
 ### Step 6: Commit
 
-Stage all changes and commit:
-- If `[message]` provided, use it as the commit message
-- Otherwise auto-generate: `<summary of changes> (v<new-version>)`
-- Always append: `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
-
-Stage specific files (not `git add -A`):
+Stage specific files (NEVER use `git add -A` or `git add .`):
 - Changed source files
 - Updated plugin.json and marketplace.json
 - Built dist files (if any)
+- Updated README/docs (if any)
+
+Commit message:
+- If `[message]` provided, use it as the commit message
+- Otherwise auto-generate: `<summary of changes> (v<new-version>)`
+- Always append: `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
 
 ### Step 7: Push
 
@@ -78,9 +102,11 @@ Stage specific files (not `git add -A`):
 git push
 ```
 
+If push fails (e.g. remote has new commits), run `git pull --rebase` then push again.
+
 ### Step 8: Report
 
-Output:
+Output exactly this format:
 ```
 Shipped <plugin-name> v<version>
   Files: <count> changed

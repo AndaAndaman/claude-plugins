@@ -41,6 +41,8 @@ Available MCP tools for AWS operations:
 
 *Jenkins:* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` (target + params) -> \`jenkins_status\` (monitor) -> \`jenkins_abort\` (if needed)
 
+*Post-build verification:* When \`jenkins_status\` shows SUCCESS, **proactively follow up** with: \`healthcheck\` action=check (verify endpoints are healthy) -> \`aws_ecs\` action=describe (check deployment rollout state) -> \`aws_ecs\` action=events (check for errors) -> \`aws_ecs\` action=wait (wait for stable if deployment in progress). This ensures the build actually landed and is serving traffic.
+
 *Git:* \`git_command\` action=status | action=diff | action=log count=5 | action=add files="src/foo.ts" | action=commit message="feat: add feature" files="src/foo.ts" | action=amend message="fix: typo" | action=branch_list all=true | action=tag target="v1.0.0" | action=show commit="abc123" | action=switch target="feature" create=true | action=pull | action=push | action=merge_to target="staging" push=true
 
 *Worktree:* \`git_worktree\` action=list | action=add path="../feature-branch" branch="feature" | action=remove path="../feature-branch"

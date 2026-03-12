@@ -29,6 +29,7 @@ Available MCP tools for AWS operations:
 
 **Git Workflow:**
 - \`git_command\` - Git shortcuts: merge_to, pull_rebase, rebase, cherry_pick, branch_cleanup
+- \`git_worktree\` - Worktree management: add, list, remove, prune
 
 **Healthcheck:**
 - \`healthcheck\` - Check health of configured endpoints (action=check), or manage endpoints (action=list/add/edit/remove)
@@ -40,6 +41,8 @@ Available MCP tools for AWS operations:
 *Jenkins:* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` (target + params) -> \`jenkins_status\` (monitor) -> \`jenkins_abort\` (if needed)
 
 *Git:* \`git_command\` action=pull_rebase | action=rebase target="canary" | action=merge_to target="staging"
+
+*Worktree:* \`git_worktree\` action=list | action=add path="../feature-branch" branch="feature" | action=remove path="../feature-branch"
 
 *Healthcheck:* \`healthcheck\` action=add name="api" url="https://api.example.com/health" -> \`healthcheck\` action=check`;
 

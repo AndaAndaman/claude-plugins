@@ -14,6 +14,7 @@ allowed-tools:
   - Glob
   - Grep
   - Bash
+  - git_command
 argument-hint: "[patch|minor|major|x.y.z] [commit message]"
 ---
 
@@ -95,24 +96,27 @@ This prevents stale instructions that cause Claude to miss new tools or use wron
 
 ### Step 6: Commit
 
-Stage specific files (NEVER use `git add -A` or `git add .`):
+**Use `git_command` MCP tool for all git operations** (not Bash).
+
+Stage specific files using `git_command action=add files="file1,file2"` (NEVER add all):
 - Changed source files
 - Updated plugin.json and marketplace.json
 - Built dist files (if any)
 - Updated README/docs (if any)
+- Updated hook files (if any)
 
 Commit message:
 - If `[message]` provided, use it as the commit message
 - Otherwise auto-generate: `<summary of changes> (v<new-version>)`
 - Always append: `Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>`
 
+Use `git_command action=commit message="..."` to commit.
+
 ### Step 7: Push
 
-```bash
-git push
-```
+Use `git_command action=push` to push.
 
-If push fails (e.g. remote has new commits), run `git pull --rebase` then push again.
+If push fails, use `git_command action=pull_rebase` then `git_command action=push` again.
 
 ### Step 8: Report
 

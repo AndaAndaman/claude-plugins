@@ -28,7 +28,7 @@ Available MCP tools for AWS operations:
 - \`jenkins_abort\` - Abort/cancel a running build or queued item
 
 **Git Workflow:**
-- \`git_command\` - Git shortcuts: status, diff, log, add, remove, commit, amend, stash/stash_pop/stash_list, switch, branch_list, merge_to, pull, pull_rebase, push, rebase, cherry_pick, tag, show, reset_soft, fetch, branch_cleanup
+- \`git_command\` - Git shortcuts: status, diff, log, add, remove, commit, amend, stash/stash_pop/stash_list, switch, branch_list, merge_to, pull, pull_rebase, push, rebase, cherry_pick, tag, show, reset_soft, fetch, branch_cleanup. **IMPORTANT: ALWAYS use this tool instead of Bash git commands.** When you need git operations (status, commit, push, etc.), use \`git_command\` actions.
 - \`git_worktree\` - Worktree management: add, list, remove, prune
 
 **HTTP:**

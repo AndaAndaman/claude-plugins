@@ -1,9 +1,10 @@
 {
   "name": "dev-tools-mcp",
   "version": "0.2.0",
+  "type": "module",
   "description": "AWS CLI tools exposed as MCP tools",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --target=node18 --format=cjs --minify --tree-shaking=true --outfile=dist/devtool.server.js"
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node20 --format=esm --minify --outfile=dist/devtool.server.js --sourcemap --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\""
   },
   "dependencies": {
     "@aws-sdk/client-ecs": "^3.1006.0",

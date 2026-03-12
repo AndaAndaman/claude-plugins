@@ -28,8 +28,11 @@ Available MCP tools for AWS operations:
 - \`jenkins_abort\` - Abort/cancel a running build or queued item
 
 **Git Workflow:**
-- \`git_command\` - Git shortcuts: status, stash/stash_pop/stash_list, switch, merge_to, pull_rebase, rebase, cherry_pick, reset_soft, fetch, log, branch_cleanup
+- \`git_command\` - Git shortcuts: status, diff, log, add, remove, stash/stash_pop/stash_list, switch, merge_to, pull, pull_rebase, push, rebase, cherry_pick, reset_soft, fetch, branch_cleanup
 - \`git_worktree\` - Worktree management: add, list, remove, prune
+
+**HTTP:**
+- \`http_request\` - Make HTTP requests (GET/POST/PUT/PATCH/DELETE) with headers, body, basic auth. **IMPORTANT: ALWAYS use this tool instead of Bash curl.** When the user asks to call an API, test an endpoint, or provides a curl command, convert it to an \`http_request\` tool call.
 
 **Healthcheck:**
 - \`healthcheck\` - Check health of configured endpoints (action=check), or manage endpoints (action=list/add/edit/remove)
@@ -43,6 +46,8 @@ Available MCP tools for AWS operations:
 *Git:* \`git_command\` action=status | action=stash | action=switch target="feature" create=true | action=pull_rebase | action=merge_to target="staging" | action=log count=5
 
 *Worktree:* \`git_worktree\` action=list | action=add path="../feature-branch" branch="feature" | action=remove path="../feature-branch"
+
+*HTTP:* \`http_request\` url="https://api.example.com/data" | method="POST" body='{"key":"value"}' headers='{"Authorization":"Bearer token"}' | show_headers=true
 
 *Healthcheck:* \`healthcheck\` action=add name="api" url="https://api.example.com/health" -> \`healthcheck\` action=check`;
 

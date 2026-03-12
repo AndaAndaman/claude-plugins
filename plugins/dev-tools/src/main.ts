@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { registerTools } from './tools/index.js';
 
 const server = new McpServer(
-  { name: 'dev-tools', version: '0.9.9' },
+  { name: 'dev-tools', version: '0.9.10' },
   { capabilities: { tools: {} } }
 );
 

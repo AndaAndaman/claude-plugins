@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { fromIni } from '@aws-sdk/credential-providers';
 import { STSClient, GetCallerIdentityCommand } from '@aws-sdk/client-sts';
-import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
+import { defineTool, textResult, errorResult, errMsg } from '../shared/mcp-helpers.js';
 import { getSsoExpiry, runAws, SSO_PROFILE, SSO_CRED_PROFILE } from '../shared/sso.js';
 import { DEFAULT_REGION } from '../shared/aws-client.js';
 
@@ -70,7 +70,7 @@ export function registerSsoRefreshTool(server: McpServer): void {
         resolvedCreds = await provider();
       } catch (err: unknown) {
         return errorResult(
-          `Could not resolve SSO credentials: ${err instanceof Error ? err.message : String(err)}\nTry: aws sso login --profile ${SSO_PROFILE}`,
+          `Could not resolve SSO credentials: ${errMsg(err)}\nTry: aws sso login --profile ${SSO_PROFILE}`,
         );
       }
 
@@ -83,7 +83,7 @@ export function registerSsoRefreshTool(server: McpServer): void {
       try {
         writeCredentialProfile(SSO_CRED_PROFILE, accessKeyId, secretAccessKey, sessionToken);
       } catch (err: unknown) {
-        return errorResult(`Failed to write credentials: ${err instanceof Error ? err.message : String(err)}`);
+        return errorResult(`Failed to write credentials: ${errMsg(err)}`);
       }
 
       // Step 4: Verify + report
@@ -97,7 +97,7 @@ export function registerSsoRefreshTool(server: McpServer): void {
         const identity = await sts.send(new GetCallerIdentityCommand({}));
         lines.push(`Verified: Account=${identity.Account} Arn=${identity.Arn}`);
       } catch (err: unknown) {
-        lines.push(`Written but verification failed: ${err instanceof Error ? err.message : String(err)}`);
+        lines.push(`Written but verification failed: ${errMsg(err)}`);
       }
 
       const newExpiry = getSsoExpiry();

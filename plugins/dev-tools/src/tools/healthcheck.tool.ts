@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
+import { defineTool, textResult, errorResult, errMsg } from '../shared/mcp-helpers.js';
 import type { HealthcheckEndpoint } from '../shared/healthcheck.js';
 import {
   getEndpoints,
@@ -37,20 +37,25 @@ async function fetchWithTimeout(
     const body = await res.text().catch(() => '');
     return { status: res.status, ok: res.ok, durationMs: Date.now() - start, body };
   } catch (err: unknown) {
-    const msg = controller.signal.aborted ? `Timeout after ${timeoutMs}ms` : (err instanceof Error ? err.message : String(err));
+    const msg = controller.signal.aborted ? `Timeout after ${timeoutMs}ms` : (errMsg(err));
     return { status: 0, ok: false, durationMs: Date.now() - start, error: msg };
   } finally {
     clearTimeout(timer);
   }
 }
 
+const BUILD_INFO_FIELDS = [
+  'gitHash', 'git_hash', 'gitCommitHash', 'commitHash', 'commit_hash', 'commit',
+  'version', 'buildTime', 'build_time', 'buildDate', 'build_date', 'timestamp',
+  'env', 'environment',
+] as const;
+
 function formatBody(body?: string): string {
   if (!body) return '';
   try {
     const json = JSON.parse(body);
     const fields: string[] = [];
-    // Extract common build info fields
-    for (const key of ['gitHash', 'git_hash', 'gitCommitHash', 'commitHash', 'commit_hash', 'commit', 'version', 'buildTime', 'build_time', 'buildDate', 'build_date', 'timestamp', 'env', 'environment']) {
+    for (const key of BUILD_INFO_FIELDS) {
       if (json[key] !== undefined) fields.push(`${key}: ${json[key]}`);
     }
     // If no known fields found, show compact JSON
@@ -113,7 +118,7 @@ export function registerHealthcheckTool(server: McpServer): void {
           });
           return textResult(`Added endpoint "${input.name}": ${input.method || 'GET'} ${input.url}`);
         } catch (err: unknown) {
-          return errorResult(err instanceof Error ? err.message : String(err));
+          return errorResult(errMsg(err));
         }
       }
 
@@ -131,7 +136,7 @@ export function registerHealthcheckTool(server: McpServer): void {
           editEndpoint(input.name as string, updates);
           return textResult(`Updated endpoint "${input.name}".`);
         } catch (err: unknown) {
-          return errorResult(err instanceof Error ? err.message : String(err));
+          return errorResult(errMsg(err));
         }
       }
 
@@ -142,7 +147,7 @@ export function registerHealthcheckTool(server: McpServer): void {
           removeEndpoint(input.name as string);
           return textResult(`Removed endpoint "${input.name}".`);
         } catch (err: unknown) {
-          return errorResult(err instanceof Error ? err.message : String(err));
+          return errorResult(errMsg(err));
         }
       }
 

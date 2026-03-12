@@ -36,29 +36,18 @@ function save(config: DevToolsConfig): void {
   writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n', 'utf8');
 }
 
-export function getProfile(): string {
-  return load().profile;
+function set<K extends keyof DevToolsConfig>(key: K, value: DevToolsConfig[K]): void {
+  save({ ...load(), [key]: value });
 }
 
-export function setProfile(name: string): void {
-  save({ ...load(), profile: name });
-}
+export function getProfile(): string { return load().profile; }
+export function setProfile(name: string): void { set('profile', name); }
 
-export function getTagKey(): string {
-  return load().tagKey;
-}
+export function getTagKey(): string { return load().tagKey; }
+export function setTagKey(key: string): void { set('tagKey', key); }
 
-export function setTagKey(key: string): void {
-  save({ ...load(), tagKey: key });
-}
-
-export function getTagValue(): string {
-  return load().tagValue;
-}
-
-export function setTagValue(value: string): void {
-  save({ ...load(), tagValue: value });
-}
+export function getTagValue(): string { return load().tagValue; }
+export function setTagValue(value: string): void { set('tagValue', value); }
 
 export function getConfig(): DevToolsConfig {
   return { ...load() };

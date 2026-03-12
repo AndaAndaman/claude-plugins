@@ -12,6 +12,10 @@ export function errorResult(text: string): ToolResult {
   return { content: [{ type: 'text', text }], isError: true };
 }
 
+export function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 // MCP SDK's tool/registerTool generics cause tsc infinite recursion with zod schemas.
 // Handler receives Record<string, unknown> — callers use `as` casts for field access.
 export function defineTool(

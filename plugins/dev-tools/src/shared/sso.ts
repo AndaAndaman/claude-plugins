@@ -63,9 +63,8 @@ export function getSsoExpiry(): SsoExpiry | null {
 
   if (withExpiry.length === 0) return null;
 
-  // Pick the one with the latest expiry
-  withExpiry.sort((a, b) => b.expiresAt.localeCompare(a.expiresAt));
-  const best = withExpiry[0];
+  // Pick the one with the latest expiry (reduce avoids sorting the full array)
+  const best = withExpiry.reduce((a, b) => b.expiresAt.localeCompare(a.expiresAt) > 0 ? b : a);
 
   const expiresEpochMs = new Date(best.expiresAt).getTime();
   if (isNaN(expiresEpochMs)) return null;

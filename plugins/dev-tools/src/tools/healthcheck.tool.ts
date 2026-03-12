@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
+import type { HealthcheckEndpoint } from '../shared/healthcheck.js';
 import {
   getEndpoints,
   getEndpoint,
@@ -35,8 +36,8 @@ async function fetchWithTimeout(
     });
     const body = await res.text().catch(() => '');
     return { status: res.status, ok: res.ok, durationMs: Date.now() - start, body };
-  } catch (err: any) {
-    const msg = controller.signal.aborted ? `Timeout after ${timeoutMs}ms` : String(err.message || err);
+  } catch (err: unknown) {
+    const msg = controller.signal.aborted ? `Timeout after ${timeoutMs}ms` : (err instanceof Error ? err.message : String(err));
     return { status: 0, ok: false, durationMs: Date.now() - start, error: msg };
   } finally {
     clearTimeout(timer);
@@ -111,8 +112,8 @@ export function registerHealthcheckTool(server: McpServer): void {
             headers,
           });
           return textResult(`Added endpoint "${input.name}": ${input.method || 'GET'} ${input.url}`);
-        } catch (err: any) {
-          return errorResult(err.message);
+        } catch (err: unknown) {
+          return errorResult(err instanceof Error ? err.message : String(err));
         }
       }
 
@@ -120,7 +121,7 @@ export function registerHealthcheckTool(server: McpServer): void {
       if (action === 'edit') {
         if (!input.name) return errorResult('Error: edit requires name.');
         try {
-          const updates: Record<string, any> = {};
+          const updates: Partial<Omit<HealthcheckEndpoint, 'name'>> = {};
           if (input.url !== undefined) updates.url = input.url;
           if (input.method !== undefined) updates.method = input.method;
           if (input.expected_status !== undefined) updates.expectedStatus = input.expected_status;
@@ -129,8 +130,8 @@ export function registerHealthcheckTool(server: McpServer): void {
           if (Object.keys(updates).length === 0) return errorResult('Error: no fields to update.');
           editEndpoint(input.name as string, updates);
           return textResult(`Updated endpoint "${input.name}".`);
-        } catch (err: any) {
-          return errorResult(err.message);
+        } catch (err: unknown) {
+          return errorResult(err instanceof Error ? err.message : String(err));
         }
       }
 
@@ -140,8 +141,8 @@ export function registerHealthcheckTool(server: McpServer): void {
         try {
           removeEndpoint(input.name as string);
           return textResult(`Removed endpoint "${input.name}".`);
-        } catch (err: any) {
-          return errorResult(err.message);
+        } catch (err: unknown) {
+          return errorResult(err instanceof Error ? err.message : String(err));
         }
       }
 

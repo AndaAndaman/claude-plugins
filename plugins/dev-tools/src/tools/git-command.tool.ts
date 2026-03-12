@@ -1,25 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
-import { spawnSync } from 'node:child_process';
-
-function git(...args: string[]): { stdout: string; stderr: string; ok: boolean } {
-  const result = spawnSync('git', args, {
-    encoding: 'utf8',
-    maxBuffer: 5 * 1024 * 1024,
-    timeout: 60000,
-  });
-  return {
-    stdout: (result.stdout || '').trim(),
-    stderr: (result.stderr || '').trim(),
-    ok: result.status === 0,
-  };
-}
-
-function currentBranch(): string | null {
-  const { stdout, ok } = git('branch', '--show-current');
-  return ok && stdout ? stdout : null;
-}
+import { git, currentBranch } from '../shared/git-helper.js';
 
 function mergeTo(target: string): string {
   const branch = currentBranch();

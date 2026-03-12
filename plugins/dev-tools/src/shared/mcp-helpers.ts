@@ -12,12 +12,12 @@ export function errorResult(text: string): ToolResult {
   return { content: [{ type: 'text', text }], isError: true };
 }
 
-export function defineTool(
+export function defineTool<T extends Record<string, z.ZodTypeAny>>(
   server: McpServer,
   name: string,
   description: string,
-  inputSchema: Record<string, z.ZodTypeAny>,
-  handler: (input: Record<string, unknown>) => Promise<ToolResult>,
+  inputSchema: T,
+  handler: (input: z.objectOutputType<T, z.ZodTypeAny>) => Promise<ToolResult>,
 ): void {
-  (server as any).registerTool(name, { description, inputSchema }, handler);
+  server.registerTool(name, { description, inputSchema }, handler);
 }

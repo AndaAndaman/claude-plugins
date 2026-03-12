@@ -246,6 +246,81 @@ function gitPull(): string {
   return result.stdout || 'Already up to date.';
 }
 
+function gitCommit(message: string, files?: string): string {
+  // Auto-add files if provided
+  if (files) {
+    const addResult = gitAdd(files);
+    if (addResult.includes('Failed:')) return `Stage failed:\n${addResult}`;
+  }
+
+  // Check there's something to commit
+  const { stdout: staged } = git('diff', '--cached', '--stat');
+  if (!staged) return 'Nothing to commit (no staged changes).';
+
+  const result = git('commit', '-m', message);
+  if (!result.ok) return `Commit failed: ${result.stderr}`;
+
+  const log = git('log', '-1', '--oneline');
+  return `Committed: ${log.stdout}`;
+}
+
+function gitAmend(message?: string): string {
+  const { stdout: staged } = git('diff', '--cached', '--stat');
+  const args = ['commit', '--amend'];
+  if (message) {
+    args.push('-m', message);
+  } else {
+    args.push('--no-edit');
+  }
+
+  const result = git(...args);
+  if (!result.ok) return `Amend failed: ${result.stderr}`;
+
+  const log = git('log', '-1', '--oneline');
+  return `Amended: ${log.stdout}${staged ? `\nNew staged changes included` : ''}`;
+}
+
+function gitTag(name?: string, del?: boolean): string {
+  // List tags
+  if (!name) {
+    const result = git('tag', '--sort=-creatordate', '-n1');
+    if (!result.ok) return `Error: ${result.stderr}`;
+    return result.stdout || 'No tags.';
+  }
+
+  // Delete tag
+  if (del) {
+    const local = git('tag', '-d', name);
+    const remote = git('push', 'origin', `:refs/tags/${name}`);
+    const lines: string[] = [];
+    lines.push(local.ok ? `Deleted local tag ${name}` : `Local delete failed: ${local.stderr}`);
+    if (remote.ok) lines.push(`Deleted remote tag ${name}`);
+    return lines.join('\n');
+  }
+
+  // Create and push tag
+  const result = git('tag', name);
+  if (!result.ok) return `Tag failed: ${result.stderr}`;
+  const push = git('push', 'origin', name);
+  if (!push.ok) return `Tag created locally but push failed: ${push.stderr}`;
+  return `Created and pushed tag ${name}`;
+}
+
+function gitBranchList(all?: boolean): string {
+  const args = ['branch', '-vv'];
+  if (all) args.push('-a');
+
+  const result = git(...args);
+  if (!result.ok) return `Error: ${result.stderr}`;
+  return result.stdout || 'No branches.';
+}
+
+function gitShow(ref: string): string {
+  const result = git('show', '--stat', '--format=commit %H%nAuthor: %an <%ae>%nDate:   %ad%n%n    %s%n', ref);
+  if (!result.ok) return `Error: ${result.stderr}`;
+  return result.stdout;
+}
+
 function branchCleanup(): string {
   const branch = currentBranch();
   const mainBranch = git('rev-parse', '--verify', 'main').ok ? 'main' : 'master';
@@ -273,24 +348,26 @@ export function registerGitCommandTool(server: McpServer): void {
   defineTool(
     server,
     'git_command',
-    'Git workflow shortcuts: status, diff, log, add, remove (unstage), stash/stash_pop/stash_list, switch, merge_to, pull, pull_rebase, push, rebase, cherry_pick, reset_soft, fetch, branch_cleanup.',
+    'Git workflow shortcuts: status, diff, log, add, remove, commit, amend, stash/stash_pop/stash_list, switch, branch_list, merge_to, pull, pull_rebase, push, rebase, cherry_pick, tag, show, reset_soft, fetch, branch_cleanup.',
     {
       action: z.enum([
-        'status', 'diff', 'log', 'add', 'remove',
-        'stash', 'stash_pop', 'stash_list', 'switch',
+        'status', 'diff', 'log', 'add', 'remove', 'commit', 'amend',
+        'stash', 'stash_pop', 'stash_list', 'switch', 'branch_list',
         'merge_to', 'pull', 'pull_rebase', 'push', 'rebase', 'cherry_pick',
-        'reset_soft', 'fetch', 'branch_cleanup',
+        'tag', 'show', 'reset_soft', 'fetch', 'branch_cleanup',
       ]).describe(
-        'status=branch+changes, diff=show changes (stat), log=recent commits, add=stage files, remove=unstage files, stash=save WIP, stash_pop=restore, stash_list=list, switch=checkout/create branch, merge_to=merge current→target, pull=pull from remote, pull_rebase=pull --rebase, push=push to remote, rebase=onto origin branch, cherry_pick=pick commit, reset_soft=undo N commits (keep staged), fetch=fetch all remotes, branch_cleanup=delete merged'
+        'status=branch+changes, diff=show changes (stat), log=recent commits, add=stage files, remove=unstage files, commit=commit staged (or add+commit with files), amend=amend last commit, stash=save WIP, stash_pop=restore, stash_list=list, switch=checkout/create branch, branch_list=list branches, merge_to=merge current→target, pull=pull from remote, pull_rebase=pull --rebase, push=push to remote, rebase=onto origin branch, cherry_pick=pick commit, tag=create/list/delete tags, show=show commit details, reset_soft=undo N commits (keep staged), fetch=fetch all remotes, branch_cleanup=delete merged'
       ),
-      target: z.string().optional().describe('Branch name for merge_to, rebase, switch, or diff (e.g. main...HEAD)'),
-      commit: z.string().optional().describe('Commit hash for cherry_pick'),
+      target: z.string().optional().describe('Branch name for merge_to, rebase, switch, diff, or commit ref for show'),
+      commit: z.string().optional().describe('Commit hash for cherry_pick or show'),
       count: z.number().optional().describe('Number of commits for reset_soft (default: 1) or log (default: 10)'),
       create: z.boolean().optional().describe('Create new branch for switch (default: false)'),
       staged: z.boolean().optional().describe('Show staged changes only for diff (default: false)'),
       force: z.boolean().optional().describe('Force push with lease for push (default: false)'),
-      files: z.string().optional().describe('File paths for add/remove, comma or space separated'),
-      message: z.string().optional().describe('Stash message (optional)'),
+      all: z.boolean().optional().describe('Include remote branches for branch_list (default: false)'),
+      delete: z.boolean().optional().describe('Delete tag for tag action (default: false)'),
+      files: z.string().optional().describe('File paths for add/remove/commit, comma or space separated'),
+      message: z.string().optional().describe('Commit/amend message, or stash message'),
     },
     async (input) => {
       const action = input.action as string;
@@ -307,6 +384,13 @@ export function registerGitCommandTool(server: McpServer): void {
         if (!input.files) return errorResult('remove requires files parameter.');
         return textResult(gitRemove(input.files as string));
       }
+      if (action === 'commit') {
+        if (!input.message) return errorResult('commit requires message parameter.');
+        return textResult(gitCommit(input.message as string, input.files as string | undefined));
+      }
+      if (action === 'amend') {
+        return textResult(gitAmend(input.message as string | undefined));
+      }
 
       if (action === 'stash') return textResult(gitStash(false, input.message as string | undefined));
       if (action === 'stash_pop') return textResult(gitStash(true));
@@ -316,6 +400,7 @@ export function registerGitCommandTool(server: McpServer): void {
         if (!input.target) return errorResult('switch requires target branch name.');
         return textResult(gitSwitch(input.target as string, input.create as boolean | undefined));
       }
+      if (action === 'branch_list') return textResult(gitBranchList(input.all as boolean | undefined));
 
       if (action === 'merge_to') {
         if (!input.target) return errorResult('merge_to requires target branch name.');
@@ -337,6 +422,12 @@ export function registerGitCommandTool(server: McpServer): void {
 
       if (action === 'reset_soft') {
         return textResult(gitResetSoft((input.count as number) || 1));
+      }
+
+      if (action === 'tag') return textResult(gitTag(input.target as string | undefined, input.delete as boolean | undefined));
+      if (action === 'show') {
+        const ref = (input.commit as string) || (input.target as string) || 'HEAD';
+        return textResult(gitShow(ref));
       }
 
       if (action === 'fetch') return textResult(gitFetch());

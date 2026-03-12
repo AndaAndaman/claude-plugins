@@ -63,14 +63,14 @@ cd plugins/<name> && npm run build
 
 Verify the build succeeds (exit code 0). If it fails, fix the error before continuing.
 
-### Step 5: Update README
+### Step 5: Update README and session-start hook
 
-Evaluate whether README updates are needed:
+Evaluate whether updates are needed:
 
 **MUST update** when:
 - New tools/commands/agents added
 - Tools/commands removed or renamed
-- Tool parameters changed
+- Tool parameters changed (new actions, new params)
 - New workflows or usage patterns
 
 **Skip** when:
@@ -80,8 +80,18 @@ Evaluate whether README updates are needed:
 
 When updating:
 - Update the root `README.md` tool lists, descriptions, and usage examples
-- Update session-start hook if it documents available tools
+- Update plugin's own `README.md` if it has tool documentation
 - Keep changes minimal — only update sections affected by the code changes
+
+**Session-start hook alignment (MANDATORY for MCP plugins):**
+
+If `plugins/<name>/hooks/` contains a session-start hook (e.g. `dev-tools_session-start.js`):
+1. Read the hook file
+2. Compare the tool list and action enums in the hook against the actual registered tools in source
+3. If any tools, actions, or parameters are missing or outdated in the hook, update it
+4. Verify workflow examples in the hook reflect current capabilities
+
+This prevents stale instructions that cause Claude to miss new tools or use wrong action names.
 
 ### Step 6: Commit
 

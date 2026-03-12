@@ -28,7 +28,7 @@ Available MCP tools for AWS operations:
 - \`jenkins_abort\` - Abort/cancel a running build or queued item
 
 **Git Workflow:**
-- \`git_command\` - Git shortcuts: status, diff, log, add, remove, stash/stash_pop/stash_list, switch, merge_to, pull, pull_rebase, push, rebase, cherry_pick, reset_soft, fetch, branch_cleanup
+- \`git_command\` - Git shortcuts: status, diff, log, add, remove, commit, amend, stash/stash_pop/stash_list, switch, branch_list, merge_to, pull, pull_rebase, push, rebase, cherry_pick, tag, show, reset_soft, fetch, branch_cleanup
 - \`git_worktree\` - Worktree management: add, list, remove, prune
 
 **HTTP:**
@@ -43,7 +43,7 @@ Available MCP tools for AWS operations:
 
 *Jenkins:* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` (target + params) -> \`jenkins_status\` (monitor) -> \`jenkins_abort\` (if needed)
 
-*Git:* \`git_command\` action=status | action=stash | action=switch target="feature" create=true | action=pull_rebase | action=merge_to target="staging" | action=log count=5
+*Git:* \`git_command\` action=status | action=diff | action=log count=5 | action=add files="src/foo.ts" | action=commit message="feat: add feature" files="src/foo.ts" | action=amend message="fix: typo" | action=branch_list all=true | action=tag target="v1.0.0" | action=show commit="abc123" | action=switch target="feature" create=true | action=pull | action=push | action=merge_to target="staging"
 
 *Worktree:* \`git_worktree\` action=list | action=add path="../feature-branch" branch="feature" | action=remove path="../feature-branch"
 

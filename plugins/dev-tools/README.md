@@ -182,16 +182,21 @@ Git workflow shortcuts with safety guardrails.
 | `log` | `count?` (default: 10) | Recent commits (graph) |
 | `add` | `files` (required) | Stage files (comma/space separated) |
 | `remove` | `files` (required) | Unstage files |
+| `commit` | `message` (required), `files?` | Commit staged changes (or add+commit with files) |
+| `amend` | `message?` | Amend last commit (new message or --no-edit) |
 | `stash` | `message?` | Save WIP (includes untracked) |
 | `stash_pop` | — | Restore last stash |
 | `stash_list` | — | List stashes |
 | `switch` | `target`, `create?` | Checkout or create branch |
+| `branch_list` | `all?` | List branches (-vv, optionally include remotes) |
 | `merge_to` | `target` (required) | Merge current branch → target, return |
 | `pull` | — | Pull from remote |
 | `pull_rebase` | — | Pull with rebase |
 | `push` | `force?` | Push to origin (force uses --force-with-lease) |
 | `rebase` | `target` (default: main) | Rebase onto origin/target |
 | `cherry_pick` | `commit` (required) | Cherry-pick a commit |
+| `tag` | `target?`, `delete?` | Create/list/delete tags (auto-pushes) |
+| `show` | `commit?` or `target?` | Show commit details + stat |
 | `reset_soft` | `count?` (default: 1) | Undo N commits (keep staged) |
 | `fetch` | — | Fetch all remotes with prune |
 | `branch_cleanup` | — | Delete all merged branches |

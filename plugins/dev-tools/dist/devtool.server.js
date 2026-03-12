@@ -164,5 +164,5 @@ Config: ${Jj()}`)}if(r==="add"){if(!t.name||!t.url)return Ve("Error: add require
          ${E}`:`  [${_}] ${c.name}: ${S}`})),i=o.length,s=o.filter(c=>c.includes("[FAIL]")).length,a=s===0?`All ${i} endpoints healthy.`:`${s}/${i} endpoints failing.`;return Q(`${a}
 
 ${o.join(`
-`)}`)}return Ve("Unknown action.")})}function koe(e){Jne(e),Hne(e),Bne(e),Kne(e),Qne(e),ooe(e),foe(e),moe(e),hoe(e),yoe(e),_oe(e),voe(e),Eoe(e),boe(e),Ioe(e)}var Poe=new Gv({name:"dev-tools",version:"0.9.6"},{capabilities:{tools:{}}});koe(Poe);async function k9e(){let e=new Zv;await Poe.connect(e)}k9e().catch(e=>{console.error("Fatal:",e),process.exit(1)});
+`)}`)}return Ve("Unknown action.")})}function koe(e){Jne(e),Hne(e),Bne(e),Kne(e),Qne(e),ooe(e),foe(e),moe(e),hoe(e),yoe(e),_oe(e),voe(e),Eoe(e),boe(e),Ioe(e)}var Poe=new Gv({name:"dev-tools",version:"0.9.7"},{capabilities:{tools:{}}});koe(Poe);async function k9e(){let e=new Zv;await Poe.connect(e)}k9e().catch(e=>{console.error("Fatal:",e),process.exit(1)});
 //# sourceMappingURL=devtool.server.js.map

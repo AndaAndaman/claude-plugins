@@ -71,7 +71,7 @@ export async function getServiceArnsByTag(tagKey: string, tagValue: string): Pro
  */
 export function formatAwsError(error: unknown): string {
   const msg = error instanceof Error ? error.message : String(error);
-  const name = error instanceof Error ? (error as NodeJS.ErrnoException).name ?? '' : '';
+  const name = error instanceof Error ? error.name : '';
   const isAuthError = /ExpiredToken|InvalidClientTokenId|AuthFailure|TokenRefreshRequired|UnauthorizedAccess|CredentialsProviderError|ExpiredTokenException/i.test(msg + name);
   if (isAuthError) {
     return `SSO credentials expired. Run aws_sso_refresh.`;

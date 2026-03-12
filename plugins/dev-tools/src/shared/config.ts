@@ -27,41 +27,27 @@ function load(): DevToolsConfig {
   } catch {
     current = { ...DEFAULTS };
   }
-  return current;
+  return current!;
 }
 
-function save(): void {
-  const config = load();
+function save(config: DevToolsConfig): void {
+  current = config;
   mkdirSync(CONFIG_DIR, { recursive: true });
   writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n', 'utf8');
 }
 
-export function getProfile(): string {
-  return load().profile;
+function set<K extends keyof DevToolsConfig>(key: K, value: DevToolsConfig[K]): void {
+  save({ ...load(), [key]: value });
 }
 
-export function setProfile(name: string): void {
-  load().profile = name;
-  save();
-}
+export function getProfile(): string { return load().profile; }
+export function setProfile(name: string): void { set('profile', name); }
 
-export function getTagKey(): string {
-  return load().tagKey;
-}
+export function getTagKey(): string { return load().tagKey; }
+export function setTagKey(key: string): void { set('tagKey', key); }
 
-export function setTagKey(key: string): void {
-  load().tagKey = key;
-  save();
-}
-
-export function getTagValue(): string {
-  return load().tagValue;
-}
-
-export function setTagValue(value: string): void {
-  load().tagValue = value;
-  save();
-}
+export function getTagValue(): string { return load().tagValue; }
+export function setTagValue(value: string): void { set('tagValue', value); }
 
 export function getConfig(): DevToolsConfig {
   return { ...load() };

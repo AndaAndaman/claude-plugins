@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
+import { defineTool, textResult, errorResult, errMsg } from '../shared/mcp-helpers.js';
+import type { HealthcheckEndpoint } from '../shared/healthcheck.js';
 import {
   getEndpoints,
   getEndpoint,
@@ -35,21 +36,26 @@ async function fetchWithTimeout(
     });
     const body = await res.text().catch(() => '');
     return { status: res.status, ok: res.ok, durationMs: Date.now() - start, body };
-  } catch (err: any) {
-    const msg = controller.signal.aborted ? `Timeout after ${timeoutMs}ms` : String(err.message || err);
+  } catch (err: unknown) {
+    const msg = controller.signal.aborted ? `Timeout after ${timeoutMs}ms` : (errMsg(err));
     return { status: 0, ok: false, durationMs: Date.now() - start, error: msg };
   } finally {
     clearTimeout(timer);
   }
 }
 
+const BUILD_INFO_FIELDS = [
+  'gitHash', 'git_hash', 'gitCommitHash', 'commitHash', 'commit_hash', 'commit',
+  'version', 'buildTime', 'build_time', 'buildDate', 'build_date', 'timestamp',
+  'env', 'environment',
+] as const;
+
 function formatBody(body?: string): string {
   if (!body) return '';
   try {
     const json = JSON.parse(body);
     const fields: string[] = [];
-    // Extract common build info fields
-    for (const key of ['gitHash', 'git_hash', 'gitCommitHash', 'commitHash', 'commit_hash', 'commit', 'version', 'buildTime', 'build_time', 'buildDate', 'build_date', 'timestamp', 'env', 'environment']) {
+    for (const key of BUILD_INFO_FIELDS) {
       if (json[key] !== undefined) fields.push(`${key}: ${json[key]}`);
     }
     // If no known fields found, show compact JSON
@@ -111,8 +117,8 @@ export function registerHealthcheckTool(server: McpServer): void {
             headers,
           });
           return textResult(`Added endpoint "${input.name}": ${input.method || 'GET'} ${input.url}`);
-        } catch (err: any) {
-          return errorResult(err.message);
+        } catch (err: unknown) {
+          return errorResult(errMsg(err));
         }
       }
 
@@ -120,17 +126,17 @@ export function registerHealthcheckTool(server: McpServer): void {
       if (action === 'edit') {
         if (!input.name) return errorResult('Error: edit requires name.');
         try {
-          const updates: Record<string, any> = {};
-          if (input.url !== undefined) updates.url = input.url;
-          if (input.method !== undefined) updates.method = input.method;
-          if (input.expected_status !== undefined) updates.expectedStatus = input.expected_status;
-          if (input.timeout_ms !== undefined) updates.timeoutMs = input.timeout_ms;
+          const updates: Partial<Omit<HealthcheckEndpoint, 'name'>> = {};
+          if (input.url !== undefined) updates.url = input.url as string;
+          if (input.method !== undefined) updates.method = input.method as 'GET' | 'HEAD';
+          if (input.expected_status !== undefined) updates.expectedStatus = input.expected_status as number;
+          if (input.timeout_ms !== undefined) updates.timeoutMs = input.timeout_ms as number;
           if (input.headers !== undefined) updates.headers = JSON.parse(input.headers as string);
           if (Object.keys(updates).length === 0) return errorResult('Error: no fields to update.');
           editEndpoint(input.name as string, updates);
           return textResult(`Updated endpoint "${input.name}".`);
-        } catch (err: any) {
-          return errorResult(err.message);
+        } catch (err: unknown) {
+          return errorResult(errMsg(err));
         }
       }
 
@@ -140,8 +146,8 @@ export function registerHealthcheckTool(server: McpServer): void {
         try {
           removeEndpoint(input.name as string);
           return textResult(`Removed endpoint "${input.name}".`);
-        } catch (err: any) {
-          return errorResult(err.message);
+        } catch (err: unknown) {
+          return errorResult(errMsg(err));
         }
       }
 

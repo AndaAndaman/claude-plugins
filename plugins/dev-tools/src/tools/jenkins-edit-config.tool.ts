@@ -44,32 +44,37 @@ export function registerJenkinsEditConfigTool(server: McpServer): void {
       }
 
       if (input.action === 'set') {
-        if (!input.target || !input.key || input.value === undefined) {
+        const target = input.target as string;
+        const key = input.key as string;
+        const value = input.value as string;
+        if (!target || !key || value === undefined) {
           return textResult('Error: set requires target, key, and value.');
         }
         const td = config.targetDefaults || {};
-        td[input.target] = { ...(td[input.target] || {}), [input.key]: input.value };
+        td[target] = { ...(td[target] || {}), [key]: value };
         saveJenkinsConfig({ targetDefaults: td });
-        return textResult(`Set ${input.target}.${input.key} = ${input.value}`);
+        return textResult(`Set ${target}.${key} = ${value}`);
       }
 
       if (input.action === 'remove') {
-        if (!input.target) {
+        const target = input.target as string;
+        const key = input.key as string | undefined;
+        if (!target) {
           return textResult('Error: remove requires target. Optionally key to remove a single param.');
         }
         const td = config.targetDefaults || {};
-        if (!td[input.target]) {
-          return textResult(`No overrides for ${input.target}.`);
+        if (!td[target]) {
+          return textResult(`No overrides for ${target}.`);
         }
-        if (input.key) {
-          delete td[input.target][input.key];
-          if (Object.keys(td[input.target]).length === 0) delete td[input.target];
+        if (key) {
+          delete td[target][key];
+          if (Object.keys(td[target]).length === 0) delete td[target];
           saveJenkinsConfig({ targetDefaults: td });
-          return textResult(`Removed ${input.target}.${input.key}`);
+          return textResult(`Removed ${target}.${key}`);
         }
-        delete td[input.target];
+        delete td[target];
         saveJenkinsConfig({ targetDefaults: td });
-        return textResult(`Removed all overrides for ${input.target}.`);
+        return textResult(`Removed all overrides for ${target}.`);
       }
 
       if (input.action === 'reset') {

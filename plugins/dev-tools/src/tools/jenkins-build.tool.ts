@@ -6,7 +6,7 @@ import { BUILD_TARGETS, triggerBuild, getQueueStatus, getBuildStatus, loadJenkin
 // Only show these key params in build summary
 const SUMMARY_KEYS = ['COMMIT_HASH', 'BUILD_BRANCH', 'BranchName', 'BUILD_SITE', 'SITE', 'STAGE', 'SERVICE_NAME', 'configuration'];
 
-export function registerJenkinsBuildTool(server: McpServer): void {
+export const registerJenkinsBuildTool = (server: McpServer): void => {
   defineTool(
     server,
     'jenkins_build',

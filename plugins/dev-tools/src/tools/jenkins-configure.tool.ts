@@ -18,13 +18,13 @@ export function registerJenkinsConfigureTool(server: McpServer): void {
       const before = loadJenkinsConfig();
       let changed = false;
 
-      const updates: Record<string, unknown> = {};
-      if (input.environment !== undefined) { updates.environment = input.environment; changed = true; }
-      if (input.url !== undefined) { updates.url = input.url; changed = true; }
-      if (input.user !== undefined) { updates.user = input.user; changed = true; }
-      if (input.token !== undefined) { updates.token = input.token; changed = true; }
+      const updates: Partial<Parameters<typeof saveJenkinsConfig>[0]> = {};
+      if (input.environment !== undefined) { updates.environment = input.environment as 'staging' | 'preprod'; changed = true; }
+      if (input.url !== undefined) { updates.url = input.url as string; changed = true; }
+      if (input.user !== undefined) { updates.user = input.user as string; changed = true; }
+      if (input.token !== undefined) { updates.token = input.token as string; changed = true; }
 
-      if (changed) saveJenkinsConfig(updates as any);
+      if (changed) saveJenkinsConfig(updates);
 
       const c = loadJenkinsConfig();
       const tok = c.token ? c.token.slice(0, 6) + '...' : '<not set>';

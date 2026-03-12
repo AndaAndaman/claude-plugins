@@ -7,6 +7,7 @@
     "build": "esbuild src/main.ts --bundle --platform=node --target=node20 --format=esm --minify --outfile=dist/devtool.server.js --sourcemap --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\""
   },
   "dependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.1007.0",
     "@aws-sdk/client-ecs": "^3.1006.0",
     "@aws-sdk/client-resource-groups-tagging-api": "^3.1006.0",
     "@aws-sdk/client-sts": "^3.1006.0",

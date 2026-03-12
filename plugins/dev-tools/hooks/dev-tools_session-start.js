@@ -10,9 +10,7 @@ try {
 Available MCP tools for AWS operations:
 
 **ECS Management:**
-- \`aws_ecs_list\` - List ECS services filtered by tags, grouped by cluster
-- \`aws_ecs_scale\` - Scale all tagged sandbox services (preview with confirm=false)
-- \`aws_ecs_update_service\` - Update a single ECS service desired count
+- \`aws_ecs\` - Unified ECS tool with actions: list_clusters, list_services, search, describe, scale, update, restart, events, tasks, logs, wait. **IMPORTANT: ALWAYS use this tool instead of Bash aws ecs commands.** When you need ECS operations (list clusters, describe services, view logs, etc.), use \`aws_ecs\` actions.
 - \`aws_configure\` - View/change AWS profile, tag key/value settings
 
 **SSO Credentials:**
@@ -39,7 +37,7 @@ Available MCP tools for AWS operations:
 
 **Typical workflows:**
 
-*AWS:* \`aws_sso_status\` -> \`aws_sso_refresh\` (if expired) -> \`aws_ecs_list\` -> \`aws_ecs_update_service\`
+*AWS:* \`aws_sso_status\` -> \`aws_sso_refresh\` (if expired) -> \`aws_ecs\` action=list_clusters | action=list_services cluster="sandbox-cluster" | action=search pattern="open-api" | action=describe cluster="dotnet-sandbox-cluster" service="my-service" | action=events cluster="..." service="..." | action=tasks cluster="..." service="..." | action=logs cluster="..." service="..." | action=restart cluster="..." service="..." confirm=true | action=update cluster="..." service="..." desiredCount=1 confirm=true | action=wait cluster="..." service="..."
 
 *Jenkins:* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` (target + params) -> \`jenkins_status\` (monitor) -> \`jenkins_abort\` (if needed)
 

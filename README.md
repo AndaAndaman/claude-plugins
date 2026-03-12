@@ -86,20 +86,20 @@ This plugin does the sizing for you. A PM agent searches the codebase, counts af
 
 ---
 
-### dev-tools (v0.9.12)
+### dev-tools (v0.9.14)
 
 You know the pain: Claude tries to `curl` an API through Bash and the quoting breaks. Or runs `git commit` in a subshell and the message gets mangled. Or you have to spell out AWS CLI flags every single time.
 
 This plugin gives Claude **native MCP tools** for git, HTTP, AWS, Jenkins, and health checks. No Bash, no shell escaping, no silent failures. Claude calls `git`, `curl`, and `aws` binaries directly through Node.js `spawnSync` — typed inputs, structured outputs, every time.
 
-**17 tools across 6 domains:**
+**14 tools across 6 domains:**
 
 | Domain | Tools | Highlights |
 |--------|-------|-----------|
 | **Git** | `git_command` | 22 actions: status, diff, log, add, remove, commit, amend, push, pull, stash, switch, branch_list, merge_to, rebase, cherry_pick, tag, show, reset_soft, fetch, and more |
 | **Git Worktree** | `git_worktree` | Create, list, remove, prune worktrees |
 | **HTTP** | `http_request` | GET/POST/PUT/PATCH/DELETE with headers, JSON body, basic auth — replaces Bash curl entirely |
-| **AWS ECS** | `aws_ecs_list`, `aws_ecs_scale`, `aws_ecs_update_service` | List, scale, and update ECS services by tag |
+| **AWS ECS** | `aws_ecs` | 11 actions: list_clusters, list_services, search, describe, scale, update, restart, events, tasks, logs, wait |
 | **AWS SSO** | `aws_sso_status`, `aws_sso_refresh`, `aws_configure` | Check token expiry, refresh credentials (handles browser login), configure profile |
 | **Jenkins** | `jenkins_configure`, `jenkins_list_targets`, `jenkins_build`, `jenkins_status`, `jenkins_abort`, `jenkins_edit_config` | Full CI lifecycle: configure, trigger, monitor, abort |
 | **Healthcheck** | `healthcheck` | Check endpoints, manage the endpoint list |
@@ -118,7 +118,7 @@ This plugin gives Claude **native MCP tools** for git, HTTP, AWS, Jenkins, and h
 | quick-wins | 0.3.5 | Finds 1-5 minute code improvements after you finish a task |
 | md-to-skill | 0.8.8 | Turns markdown files into Claude skills automatically |
 | feature-sprint | 0.8.2 | Right-sizes your workflow from one-liner to full team sprint |
-| dev-tools | 0.9.12 | Native MCP tools for git, HTTP, AWS, Jenkins, health checks |
+| dev-tools | 0.9.14 | Native MCP tools for git, HTTP, AWS, Jenkins, health checks |
 
 ## Works with FlowAccount
 

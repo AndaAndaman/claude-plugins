@@ -85,33 +85,23 @@ The target branch to merge into depends on the build target:
 
 ### AWS ECS
 
-#### `aws_ecs_list`
+#### `aws_ecs`
 
-Lists all ECS services matching a tag, grouped by cluster. Shows desired count, running count, and status.
+Unified ECS management tool with 11 actions.
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `tagValue` | string | No | Tag value to filter by (default: configurable) |
-
-#### `aws_ecs_scale`
-
-Scales **all** ECS services matching a tag to `desiredCount=1`. Has a confirm gate — defaults to preview mode.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `tagValue` | string | No | Tag value to filter |
-| `confirm` | boolean | No | Set `true` to execute (default: preview) |
-
-#### `aws_ecs_update_service`
-
-Updates the desired count for a **single** ECS service. Has a confirm gate.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `cluster` | string | Yes | ECS cluster name |
-| `service` | string | Yes | ECS service name |
-| `desiredCount` | number | Yes | New desired count |
-| `confirm` | boolean | No | Set `true` to execute (default: preview) |
+| Action | Parameters | Description |
+|--------|-----------|-------------|
+| `list_clusters` | — | List all ECS clusters |
+| `list_services` | `cluster?`, `tagValue?` | Services by cluster name or tag filter |
+| `search` | `pattern` (required) | Find services by regex across all clusters |
+| `describe` | `cluster`, `service` | Deployments, rollout state, task def, load balancers |
+| `scale` | `tagValue?`, `desiredCount?`, `confirm` | Bulk scale tagged services (default: preview) |
+| `update` | `cluster`, `service`, `desiredCount`, `confirm` | Single service desired count (default: preview) |
+| `restart` | `cluster`, `service`, `confirm` | Force new deployment (default: preview) |
+| `events` | `cluster`, `service`, `count?` (default: 10) | Last N service events |
+| `tasks` | `cluster`, `service` | Running tasks with IPs, health, containers |
+| `logs` | `cluster`, `service`, `task?`, `count?` (default: 50) | CloudWatch logs (latest task or specific) |
+| `wait` | `cluster`, `service`, `timeout?` (default: 300s) | Poll until deployment stable |
 
 ---
 
@@ -249,7 +239,7 @@ Check health of configured endpoints, or manage the endpoint list.
 /build api preprod
 ```
 
-**AWS:** `aws_sso_status` → `aws_sso_refresh` (if expired) → `aws_ecs_list` → `aws_ecs_update_service`
+**AWS:** `aws_sso_status` → `aws_sso_refresh` (if expired) → `aws_ecs action=search pattern="my-service"` → `aws_ecs action=describe cluster="..." service="..."` → `aws_ecs action=update cluster="..." service="..." desiredCount=1 confirm=true`
 
 **Jenkins manual:** `jenkins_configure` (set token once) → `jenkins_list_targets` → `jenkins_build` → `jenkins_status` → `jenkins_abort` (if needed)
 
@@ -282,17 +272,16 @@ dev-tools/
 ├── src/
 │   ├── main.ts
 │   ├── shared/
-│   │   ├── aws.ts
+│   │   ├── aws-client.ts
 │   │   ├── config.ts
 │   │   ├── healthcheck.ts
+│   │   ├── http.ts
 │   │   ├── jenkins.ts
 │   │   ├── mcp-helpers.ts
 │   │   └── sso.ts
 │   └── tools/
 │       ├── index.ts
-│       ├── ecs-list.tool.ts
-│       ├── ecs-scale.tool.ts
-│       ├── ecs-update-service.tool.ts
+│       ├── ecs.tool.ts
 │       ├── sso-status.tool.ts
 │       ├── sso-refresh.tool.ts
 │       ├── set-profile.tool.ts
@@ -303,6 +292,8 @@ dev-tools/
 │       ├── jenkins-abort.tool.ts
 │       ├── jenkins-edit-config.tool.ts
 │       ├── git-command.tool.ts
+│       ├── git-worktree.tool.ts
+│       ├── http-request.tool.ts
 │       └── healthcheck.tool.ts
 ├── dist/
 │   └── devtool.server.js

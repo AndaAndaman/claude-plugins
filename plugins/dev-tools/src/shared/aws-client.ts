@@ -2,6 +2,7 @@ import { fromIni } from '@aws-sdk/credential-providers';
 import { ECSClient } from '@aws-sdk/client-ecs';
 import { ResourceGroupsTaggingAPIClient, GetResourcesCommand } from '@aws-sdk/client-resource-groups-tagging-api';
 import { STSClient } from '@aws-sdk/client-sts';
+import { CloudWatchLogsClient } from '@aws-sdk/client-cloudwatch-logs';
 import { getProfile } from './config.js';
 
 export const DEFAULT_REGION = 'ap-southeast-1';
@@ -10,6 +11,7 @@ let _cachedProfile: string | undefined;
 let _ecs: ECSClient | undefined;
 let _tagging: ResourceGroupsTaggingAPIClient | undefined;
 let _sts: STSClient | undefined;
+let _logs: CloudWatchLogsClient | undefined;
 
 function getClientOptions() {
   const profile = getProfile();
@@ -18,6 +20,7 @@ function getClientOptions() {
     _ecs = undefined;
     _tagging = undefined;
     _sts = undefined;
+    _logs = undefined;
   }
   return { region: DEFAULT_REGION, credentials: fromIni({ profile }) };
 }
@@ -32,6 +35,10 @@ export function taggingClient(): ResourceGroupsTaggingAPIClient {
 
 export function stsClient(): STSClient {
   return _sts ??= new STSClient(getClientOptions());
+}
+
+export function logsClient(): CloudWatchLogsClient {
+  return _logs ??= new CloudWatchLogsClient(getClientOptions());
 }
 
 /** Parse an ECS service ARN into cluster and service names. */

@@ -13,7 +13,7 @@ export function registerEcsListTool(server: McpServer): void {
     'aws_ecs_list',
     'Lists ECS services filtered by tag key/value, grouped by cluster with service status.',
     {
-      tagValue: z.string().optional().describe(`Tag value to filter by (default: "${getTagValue()}")`),
+      tagValue: z.string().optional().describe('Tag value to filter by (uses configured default if omitted)'),
     },
     async (input) => {
       try {

@@ -122,10 +122,10 @@ export function registerHealthcheckTool(server: McpServer): void {
         if (!input.name) return errorResult('Error: edit requires name.');
         try {
           const updates: Partial<Omit<HealthcheckEndpoint, 'name'>> = {};
-          if (input.url !== undefined) updates.url = input.url;
-          if (input.method !== undefined) updates.method = input.method;
-          if (input.expected_status !== undefined) updates.expectedStatus = input.expected_status;
-          if (input.timeout_ms !== undefined) updates.timeoutMs = input.timeout_ms;
+          if (input.url !== undefined) updates.url = input.url as string;
+          if (input.method !== undefined) updates.method = input.method as 'GET' | 'HEAD';
+          if (input.expected_status !== undefined) updates.expectedStatus = input.expected_status as number;
+          if (input.timeout_ms !== undefined) updates.timeoutMs = input.timeout_ms as number;
           if (input.headers !== undefined) updates.headers = JSON.parse(input.headers as string);
           if (Object.keys(updates).length === 0) return errorResult('Error: no fields to update.');
           editEndpoint(input.name as string, updates);

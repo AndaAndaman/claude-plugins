@@ -30,6 +30,7 @@ export function httpRequest(url: string, opts: HttpOptions = {}): HttpResponse {
 
   const args = [
     '-s',
+    '-g',
     '-i',
     '--max-time', String(Math.ceil(timeout / 1000)),
     '-X', method,

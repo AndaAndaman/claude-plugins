@@ -459,3 +459,58 @@ export function getBuildStatus(buildUrl: string, consoleLines = 20): BuildStatus
 
   return { building, result, number, url: buildUrl, consoleLines: lines };
 }
+
+// ---------- Build History ----------
+
+export interface BuildHistoryEntry {
+  number: number;
+  result: string | null;
+  building: boolean;
+  timestamp: number;
+  durationMs: number;
+  user?: string;
+  params: Record<string, string>;
+  url: string;
+}
+
+export function getBuildHistory(jobPath: string, count = 10): BuildHistoryEntry[] {
+  const config = loadJenkinsConfig();
+  const url = `${config.url}/job/${jobPath}/api/json`
+    + `?tree=builds[number,result,timestamp,duration,building,url,actions[causes[userId],parameters[name,value]]]{0,${count}}`;
+  const { status, body } = jenkinsGet(url, config, 15000);
+
+  if (status !== 200) return [];
+
+  try {
+    const data = JSON.parse(body);
+    const builds: BuildHistoryEntry[] = (data.builds || []).map((b: any) => {
+      let user: string | undefined;
+      const params: Record<string, string> = {};
+
+      for (const action of b.actions || []) {
+        if (action.causes) {
+          user = action.causes[0]?.userId;
+        }
+        if (action.parameters) {
+          for (const p of action.parameters) {
+            params[p.name] = String(p.value);
+          }
+        }
+      }
+
+      return {
+        number: b.number,
+        result: b.result ?? null,
+        building: b.building ?? false,
+        timestamp: b.timestamp,
+        durationMs: b.duration ?? 0,
+        user,
+        params,
+        url: b.url,
+      };
+    });
+    return builds;
+  } catch {
+    return [];
+  }
+}

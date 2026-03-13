@@ -24,6 +24,7 @@ Available MCP tools for AWS operations:
 - \`jenkins_build\` - Trigger a build (ui, api, api-report, api-doc, api-profile, open-api, lambda-pdf-preview, lambda-pdf-gen). Accepts optional \`environment\` param ("staging"|"preprod"). Resolves queue to build number (blocks up to 90s).
 - \`jenkins_build_verify\` - **Combined workflow:** trigger build + poll until complete + run healthchecks — all in 1 call. Use this instead of sequential jenkins_build → jenkins_status → healthcheck. Accepts optional \`environment\` param ("staging"|"preprod"). Example: {target: "ui", environment: "staging", verify: true}. **Always run via bg-runner agent** (blocks for minutes).
 - \`jenkins_status\` - Check build status + console output. **One-off check only — NEVER call in a loop to poll.** Use \`jenkins_build_verify\` instead.
+- \`jenkins_history\` - Show recent build history for a target. Example: {target: "ui", count: 5}. Shows build number, result, branch, service, who triggered, and time ago.
 - \`jenkins_abort\` - Abort/cancel a running build or queued item
 
 **Git Workflow:**
@@ -58,7 +59,7 @@ You will be notified when the background task completes.
 
 *AWS:* \`aws_sso_status\` -> \`aws_sso_refresh\` (if expired) -> \`aws_ecs\` action=list_clusters | action=list_services cluster="sandbox-cluster" | action=search pattern="open-api" | action=describe cluster="dotnet-sandbox-cluster" service="my-service" | action=events | action=tasks | action=logs | action=restart confirm=true | action=update desiredCount=1 confirm=true | action=wait
 
-*Jenkins (individual):* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` -> \`jenkins_status\` (one-off only, NEVER loop) -> \`jenkins_abort\`
+*Jenkins (individual):* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` -> \`jenkins_status\` (one-off only, NEVER loop) -> \`jenkins_history\` target="ui" -> \`jenkins_abort\`
 
 *Git (individual):* \`git_command\` action=status | action=diff | action=log | action=switch | action=stash | action=branch_list | action=tag | action=show | action=amend | action=rebase | action=cherry_pick | action=reset_soft | action=fetch | action=branch_cleanup
 

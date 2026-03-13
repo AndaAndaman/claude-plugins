@@ -15,6 +15,7 @@ import { registerGitWorktreeTool } from './git-worktree.tool.js';
 import { registerHealthcheckTool } from './healthcheck.tool.js';
 import { registerHttpRequestTool } from './http-request.tool.js';
 import { registerJenkinsBuildVerifyTool } from './jenkins-build-verify.tool.js';
+import { registerJenkinsHistoryTool } from './jenkins-history.tool.js';
 
 export function registerTools(server: McpServer): void {
   registerConfigureTool(server);
@@ -28,6 +29,7 @@ export function registerTools(server: McpServer): void {
   registerJenkinsAbortTool(server);
   registerJenkinsEditConfigTool(server);
   registerJenkinsBuildVerifyTool(server);
+  registerJenkinsHistoryTool(server);
   registerGitCommandTool(server);
   registerGitShipTool(server);
   registerGitWorktreeTool(server);

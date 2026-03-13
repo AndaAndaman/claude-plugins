@@ -22,11 +22,13 @@ Available MCP tools for AWS operations:
 - \`jenkins_edit_config\` - View/set/remove/reset per-target default overrides
 - \`jenkins_list_targets\` - Show available build targets with default parameters
 - \`jenkins_build\` - Trigger a build (ui, api, api-report, api-doc, api-profile, open-api, lambda-pdf-preview, lambda-pdf-gen). Automatically resolves queue to build number (blocks up to 90s).
+- \`jenkins_build_verify\` - **Combined workflow:** trigger build + poll until complete + run healthchecks — all in 1 call. Use this instead of sequential jenkins_build → jenkins_status → healthcheck. Example: {target: "ui", verify: true}. **Always run via bg-runner agent** (blocks for minutes).
 - \`jenkins_status\` - Check build status + console output. If no URL provided, checks last triggered build.
 - \`jenkins_abort\` - Abort/cancel a running build or queued item
 
 **Git Workflow:**
 - \`git_command\` - Git shortcuts: status, diff, log, add, remove, commit, amend, stash/stash_pop/stash_list, switch, branch_list, merge_to, pull, pull_rebase, push, rebase, cherry_pick, tag, show, reset_soft, fetch, branch_cleanup. **IMPORTANT: ALWAYS use this tool instead of Bash git commands.** When you need git operations (status, commit, push, etc.), use \`git_command\` actions.
+- \`git_ship\` - **Combined workflow:** commit + push + optional merge_to — all in 1 call. Use this instead of sequential git_command add → commit → push → merge_to. Example: {message: "feat: add X", files: "src/foo.ts", push: true, merge_to: "a-staging"}
 - \`git_worktree\` - Worktree management: add, list, remove, prune
 
 **HTTP:**
@@ -41,6 +43,8 @@ Available MCP tools for AWS operations:
 
 *Jenkins:* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` (target + params) -> \`jenkins_status\` (monitor) -> \`jenkins_abort\` (if needed)
 
+*Jenkins (combined):* \`jenkins_build_verify\` target="ui" verify=true — triggers build, polls until done, runs healthchecks. **Always run via bg-runner agent** since it blocks for minutes. This replaces the manual jenkins_build → jenkins_status → healthcheck chain.
+
 *Post-build verification:* When \`jenkins_status\` shows SUCCESS, **proactively follow up** with: \`healthcheck\` action=check (verify endpoints are healthy) -> \`aws_ecs\` action=describe (check deployment rollout state) -> \`aws_ecs\` action=events (check for errors) -> \`aws_ecs\` action=wait (wait for stable if deployment in progress). This ensures the build actually landed and is serving traffic.
 
 **Background agent for long-running operations:**
@@ -54,6 +58,8 @@ The \`bg-runner\` agent runs dev-tools MCP calls in the background so you can ke
 You will be notified when the background task completes.
 
 *Git:* \`git_command\` action=status | action=diff | action=log count=5 | action=add files="src/foo.ts" | action=commit message="feat: add feature" files="src/foo.ts" | action=amend message="fix: typo" | action=branch_list all=true | action=tag target="v1.0.0" | action=show commit="abc123" | action=switch target="feature" create=true | action=pull | action=push | action=merge_to target="staging" push=true
+
+*Git (combined):* \`git_ship\` message="feat: add X" files="src/foo.ts" push=true merge_to="a-staging" — stages, commits, pushes, and merges in 1 call. Use instead of sequential git_command calls when shipping code.
 
 *Worktree:* \`git_worktree\` action=list | action=add path="../feature-branch" branch="feature" | action=remove path="../feature-branch"
 

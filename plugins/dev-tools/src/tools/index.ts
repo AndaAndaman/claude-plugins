@@ -10,9 +10,11 @@ import { registerJenkinsStatusTool } from './jenkins-status.tool.js';
 import { registerJenkinsAbortTool } from './jenkins-abort.tool.js';
 import { registerJenkinsEditConfigTool } from './jenkins-edit-config.tool.js';
 import { registerGitCommandTool } from './git-command.tool.js';
+import { registerGitShipTool } from './git-ship.tool.js';
 import { registerGitWorktreeTool } from './git-worktree.tool.js';
 import { registerHealthcheckTool } from './healthcheck.tool.js';
 import { registerHttpRequestTool } from './http-request.tool.js';
+import { registerJenkinsBuildVerifyTool } from './jenkins-build-verify.tool.js';
 
 export function registerTools(server: McpServer): void {
   registerConfigureTool(server);
@@ -25,7 +27,9 @@ export function registerTools(server: McpServer): void {
   registerJenkinsStatusTool(server);
   registerJenkinsAbortTool(server);
   registerJenkinsEditConfigTool(server);
+  registerJenkinsBuildVerifyTool(server);
   registerGitCommandTool(server);
+  registerGitShipTool(server);
   registerGitWorktreeTool(server);
   registerHealthcheckTool(server);
   registerHttpRequestTool(server);

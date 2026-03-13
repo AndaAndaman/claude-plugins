@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
-import { getBuildStatus, getQueueStatus, getLastBuild, setLastBuild } from '../shared/jenkins.js';
+import { getBuildStatus, getQueueStatus, getLastBuild, setLastBuild, type QueueStatus } from '../shared/jenkins.js';
 
 export function registerJenkinsStatusTool(server: McpServer): void {
   defineTool(
@@ -44,15 +44,15 @@ export function registerJenkinsStatusTool(server: McpServer): void {
         if (q.buildUrl) {
           if (last && last.queueUrl === url) {
             const status = getBuildStatus(q.buildUrl, numLines);
-            setLastBuild({ ...last, buildUrl: q.buildUrl, buildNumber: status.number ?? undefined });
+            setLastBuild({ ...last, buildUrl: q.buildUrl, buildNumber: q.buildNumber ?? status.number ?? undefined });
             return textResult(formatStatus(status));
           }
           return textResult(formatStatus(getBuildStatus(q.buildUrl, numLines)));
         }
         if (q.cancelled) {
-          return textResult('Build was cancelled in queue.');
+          return textResult(formatQueueStatus(q, url));
         }
-        return textResult(`Queued: ${q.reason}`);
+        return textResult(formatQueueStatus(q, url));
       }
 
       const status = getBuildStatus(url, numLines);
@@ -70,5 +70,26 @@ function formatStatus(s: ReturnType<typeof getBuildStatus>): string {
   if (s.consoleLines.length > 0) {
     parts.push('--- console ---', ...s.consoleLines);
   }
+  return parts.join('\n');
+}
+
+function formatQueueStatus(q: QueueStatus, queueUrl: string): string {
+  const parts: string[] = [];
+
+  if (q.cancelled) {
+    parts.push('CANCELLED in queue');
+  } else if (q.stuck) {
+    parts.push('STUCK in queue');
+  } else if (q.blocked) {
+    parts.push('BLOCKED in queue');
+  } else {
+    parts.push('QUEUED');
+  }
+
+  if (q.taskName) parts.push(`Job: ${q.taskName}`);
+  if (q.taskUrl) parts.push(`URL: ${q.taskUrl}`);
+  if (q.reason) parts.push(`Reason: ${q.reason}`);
+  parts.push(`Queue: ${queueUrl}`);
+
   return parts.join('\n');
 }

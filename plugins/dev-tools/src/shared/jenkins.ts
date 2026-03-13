@@ -352,21 +352,45 @@ export function setLastBuild(info: LastBuild): void { _lastBuild = info; }
 
 // ---------- Queue Resolution ----------
 
-export function getQueueStatus(queueUrl: string): { buildUrl?: string; cancelled?: boolean; waiting: boolean; reason?: string } {
+export interface QueueStatus {
+  buildUrl?: string;
+  buildNumber?: number;
+  cancelled?: boolean;
+  waiting: boolean;
+  reason?: string;
+  blocked?: boolean;
+  stuck?: boolean;
+  taskName?: string;
+  taskUrl?: string;
+}
+
+export function getQueueStatus(queueUrl: string): QueueStatus {
   const config = loadJenkinsConfig();
-  const base = queueUrl.replace(/\/$/, '');
-  const { body } = jenkinsGet(`${base}/api/json?tree=cancelled,executable[url,number]`, config);
+  const apiBase = queueUrl.replace(/\/$/, '');
+  const { body } = jenkinsGet(
+    `${apiBase}/api/json?tree=cancelled,why,blocked,stuck,task[name,url],executable[url,number]`,
+    config,
+  );
 
   try {
     const data = JSON.parse(body);
+    const task = data?.task;
+    const info: QueueStatus = {
+      waiting: false,
+      blocked: data?.blocked ?? false,
+      stuck: data?.stuck ?? false,
+      taskName: task?.name,
+      taskUrl: task?.url,
+    };
+
     if (data?.cancelled) {
-      return { waiting: false, cancelled: true, reason: 'Build was cancelled' };
+      return { ...info, cancelled: true, reason: 'Build was cancelled' };
     }
     const exec = data?.executable;
     if (exec?.url) {
-      return { buildUrl: exec.url, waiting: false };
+      return { ...info, buildUrl: exec.url, buildNumber: exec.number };
     }
-    return { waiting: true, reason: data?.why || 'Waiting in queue' };
+    return { ...info, waiting: true, reason: data?.why || 'Waiting in queue' };
   } catch {
     return { waiting: true, reason: 'Cannot parse queue response' };
   }

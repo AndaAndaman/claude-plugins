@@ -41,7 +41,7 @@ description: >-
   </example>
 model: haiku
 color: blue
-tools: []
+disallowedTools: Write, Edit, Agent
 mcpServers:
   - dev-tools
 ---

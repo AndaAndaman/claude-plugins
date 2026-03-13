@@ -27,7 +27,22 @@ export function registerJenkinsHistoryTool(server: McpServer): void {
       }
 
       const jobPath = resolveJobPath(bt, config);
-      const builds = getBuildHistory(jobPath, count);
+
+      // Shared jobs (e.g. dotnet.arm64) contain builds for many SERVICE_NAMEs.
+      // Determine the filter param (SERVICE_NAME or lambda) and value from target defaults.
+      const filterParam = bt.defaults['SERVICE_NAME'] ? 'SERVICE_NAME'
+        : bt.defaults['lambda'] ? 'lambda'
+        : null;
+      const filterValue = filterParam ? bt.defaults[filterParam] : null;
+
+      // Fetch extra builds when filtering, so we can fill `count` after filtering.
+      const fetchCount = filterValue ? count * 5 : count;
+      let builds = getBuildHistory(jobPath, fetchCount);
+
+      if (filterValue) {
+        builds = builds.filter(b => b.params[filterParam!] === filterValue);
+        builds = builds.slice(0, count);
+      }
 
       if (builds.length === 0) {
         return textResult(`No build history found for ${target} (${config.environment})`);

@@ -4,19 +4,16 @@ description: Ship current branch to staging/preprod and trigger Jenkins build. U
 argument-hint: "[target] [environment]"
 allowed-tools:
   - AskUserQuestion
+  - Agent
+  - mcp__plugin_dev-tools_dev-tools__git_ship
   - mcp__plugin_dev-tools_dev-tools__git_command
-  - mcp__plugin_dev-tools_dev-tools__jenkins_build
-  - mcp__plugin_dev-tools_dev-tools__jenkins_status
+  - mcp__plugin_dev-tools_dev-tools__jenkins_build_verify
   - mcp__plugin_dev-tools_dev-tools__jenkins_list_targets
-  - Bash
 ---
 
 # Deploy Command
 
-Ship current branch to an environment and trigger a Jenkins build.
-
-Read the ship-and-build skill for branch conventions and target details:
-- `skills/ship-and-build/SKILL.md`
+Ship current branch to an environment and trigger a Jenkins build. Uses combined tools for minimum round-trips.
 
 ## Process
 
@@ -38,16 +35,9 @@ Which service to build?
 - lambda-pdf-gen (PDF Generator)
 ```
 
-**If environment missing**, ask:
-```
-Which environment?
-- staging (Recommended)
-- preprod
-```
+**If environment missing**, default to `staging`. Only ask if ambiguous.
 
 ### 2. Resolve target branch
-
-Look up the correct branch from the skill's Branch Conventions table:
 
 | Target | Staging branch | Preprod branch |
 |---|---|---|
@@ -55,60 +45,43 @@ Look up the correct branch from the skill's Branch Conventions table:
 | `api`, `api-report`, `api-doc`, `api-profile`, `open-api` | `canary-staging` | `canary-preprod` |
 | `lambda-pdf-preview`, `lambda-pdf-gen` | `a-staging` | `a-preprod` |
 
-### 3. Check working tree
+### 3. Ship code (1 call)
+
+Use `git_ship` to push and merge in one call:
 
 ```
-git_command action="status"
+git_ship message="" push=true merge_to="<resolved-branch>"
 ```
 
-If dirty:
-- Show what's uncommitted
-- Ask: "You have uncommitted changes. Commit first, stash, or abort?"
-- If commit: help commit with `git_command action="commit"`, then continue
-- If stash: `git_command action="stash"`, continue (remind to pop later)
-- If abort: stop
+Note: `message` is required but we're not committing new changes — if there are no staged changes, skip `git_ship` and use `git_command action=push` then `git_command action=merge_to target=<branch> push=true` instead.
 
-### 4. Push current branch to origin
-
-Before merging, push the current branch so origin is up to date:
-
+**Simpler approach:** Check status first with `git_command action=status`. If clean, just push + merge:
 ```
-git_command action="push"
+git_command action=push
+git_command action=merge_to target="<resolved-branch>" push=true
 ```
 
-### 5. Merge and push to environment branch
+If dirty, ask user to commit or stash first.
+
+### 4. Build + verify (1 call via bg-runner)
+
+Run in background so user can keep working:
 
 ```
-git_command action="merge_to" target="<resolved-branch>" push=true
+Agent(subagent_type="dev-tools:bg-runner", run_in_background=true, prompt="Use jenkins_build_verify with target=<target> verify=true. Report the full result.")
 ```
 
-If conflict:
-- Report the conflict details
-- Suggest: "Resolve conflicts manually, then run `/deploy` again"
-- Stop
+### 5. Report
 
-### 6. Trigger build
-
-```
-jenkins_build target="<target>" environment="<environment>"
-```
-
-If environment is staging, `environment` param can be omitted.
-
-### 7. Monitor
-
-```
-jenkins_status target="<target>"
-```
-
-### 8. Report
+When bg-runner completes, relay the result:
 
 ```
 Deploy summary:
   Branch: <source> → <env-branch>
   Target: <target>
   Environment: <environment>
-  Build: <status/url>
+  Build: <SUCCESS/FAILURE>
+  Healthcheck: <all OK / N failing>
 ```
 
 ## Examples
@@ -117,5 +90,5 @@ Deploy summary:
 /deploy                      # Interactive — asks target + environment
 /deploy ui staging           # Ship UI to staging (merge to a-staging)
 /deploy api preprod          # Ship API to preprod (merge to canary-preprod)
-/deploy lambda-pdf-gen staging  # Ship lambda to staging (merge to a-staging)
+/deploy lambda-pdf-gen       # Ship lambda to staging (merge to a-staging)
 ```

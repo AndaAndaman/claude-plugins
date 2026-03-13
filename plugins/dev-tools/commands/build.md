@@ -4,32 +4,14 @@ description: Trigger a Jenkins build without merging. Usage - /build, /build ui,
 argument-hint: "[target] [environment]"
 allowed-tools:
   - AskUserQuestion
-  - mcp__plugin_dev-tools_dev-tools__jenkins_build
-  - mcp__plugin_dev-tools_dev-tools__jenkins_status
+  - Agent
+  - mcp__plugin_dev-tools_dev-tools__jenkins_build_verify
   - mcp__plugin_dev-tools_dev-tools__jenkins_list_targets
 ---
 
 # Build Command
 
-Trigger a Jenkins build. No git merge, no branch switching — just build.
-
-Read the ship-and-build skill for target details and environment parameters:
-- `skills/ship-and-build/SKILL.md`
-
-## Build Targets & Environment Parameters
-
-Each target builds a specific service. The plugin auto-applies correct params per environment.
-
-| Target | Description | Staging branch/key param | Preprod overrides |
-|---|---|---|---|
-| `ui` | UI/Frontend | BUILD_BRANCH=a-staging, BUILD_SITE=acc | BUILD_BRANCH=a-preprod, BUILD_SITE=a |
-| `api` | API Core | COMMIT_HASH=canary-staging, BUILD_SITE=acc, STAGE=sandbox | COMMIT_HASH=canary-preprod, BUILD_SITE=ac, STAGE=preprod |
-| `api-report` | Report API | COMMIT_HASH=canary-staging, BUILD_SITE=acc, STAGE=sandbox | COMMIT_HASH=canary-preprod, BUILD_SITE=ac, STAGE=preprod |
-| `api-doc` | Document API | COMMIT_HASH=canary-staging, BUILD_SITE=acc, STAGE=sandbox | COMMIT_HASH=canary-preprod, BUILD_SITE=ac, STAGE=preprod |
-| `api-profile` | Profile API | COMMIT_HASH=canary-staging, BUILD_SITE=acc, STAGE=sandbox | COMMIT_HASH=canary-preprod, BUILD_SITE=ac, STAGE=preprod |
-| `open-api` | Open API | COMMIT_HASH=canary-staging, NS=-ns, STAGE=sandbox-ns | COMMIT_HASH=canary-preprod, STAGE=preprod-ns |
-| `lambda-pdf-preview` | PDF Preview | BranchName=a-staging, configuration=staging | BranchName=a-preprod, configuration=preprod |
-| `lambda-pdf-gen` | PDF Generator | BranchName=a-staging, configuration=staging | BranchName=a-preprod, configuration=preprod |
+Trigger a Jenkins build and monitor until complete. No git merge, no branch switching — just build.
 
 ## Process
 
@@ -51,43 +33,35 @@ Which service to build?
 - lambda-pdf-gen (PDF Generator)
 ```
 
-**If environment missing**, ask:
-```
-Which environment?
-- staging (Recommended)
-- preprod
-```
+**If environment missing**, default to `staging`. Only ask if ambiguous.
 
-### 2. Trigger build
+### 2. Build + verify (1 call via bg-runner)
+
+Run in background so user can keep working:
 
 ```
-jenkins_build target="<target>" environment="<environment>"
+Agent(subagent_type="dev-tools:bg-runner", run_in_background=true, prompt="Use jenkins_build_verify with target=<target> verify=true. Report the full result.")
 ```
 
-If environment is staging, `environment` param can be omitted.
+This single tool call does: trigger build → resolve queue → poll until complete → run healthchecks.
 
-### 3. Monitor
+### 3. Report
 
-```
-jenkins_status target="<target>"
-```
-
-Report build status. If failed, show console output excerpt.
-
-### 4. Report
+When bg-runner completes, relay the result to the user:
 
 ```
-Build triggered:
+Build complete:
   Target: <target>
   Environment: <environment>
-  Build: <status/url>
+  Result: <SUCCESS/FAILURE>
+  Healthcheck: <all OK / N failing>
 ```
 
 ## Examples
 
 ```bash
-/build                       # Interactive — asks target + environment
+/build                       # Interactive — asks target
 /build ui                    # Build UI on staging (default)
 /build api preprod           # Build API on preprod
-/build lambda-pdf-gen staging   # Build lambda on staging
+/build lambda-pdf-gen        # Build lambda on staging
 ```

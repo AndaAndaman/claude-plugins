@@ -37,29 +37,28 @@ Available MCP tools for AWS operations:
 **Healthcheck:**
 - \`healthcheck\` - Check health of configured endpoints (action=check), or manage endpoints (action=list/add/edit/remove)
 
-**Typical workflows:**
+**PREFER combined tools over sequential calls** (each MCP round-trip costs full base context):
 
-*AWS:* \`aws_sso_status\` -> \`aws_sso_refresh\` (if expired) -> \`aws_ecs\` action=list_clusters | action=list_services cluster="sandbox-cluster" | action=search pattern="open-api" | action=describe cluster="dotnet-sandbox-cluster" service="my-service" | action=events cluster="..." service="..." | action=tasks cluster="..." service="..." | action=logs cluster="..." service="..." | action=restart cluster="..." service="..." confirm=true | action=update cluster="..." service="..." desiredCount=1 confirm=true | action=wait cluster="..." service="..."
+*Shipping code:* **USE \`git_ship\`** message="feat: add X" files="src/foo.ts" push=true merge_to="a-staging" — stages, commits, pushes, and merges in 1 call. Only fall back to \`git_command\` for individual operations (status, diff, log, switch, stash, etc.).
 
-*Jenkins:* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` (target + params) -> \`jenkins_status\` (monitor) -> \`jenkins_abort\` (if needed)
-
-*Jenkins (combined):* \`jenkins_build_verify\` target="ui" verify=true — triggers build, polls until done, runs healthchecks. **Always run via bg-runner agent** since it blocks for minutes. This replaces the manual jenkins_build → jenkins_status → healthcheck chain.
-
-*Post-build verification:* When \`jenkins_status\` shows SUCCESS, **proactively follow up** with: \`healthcheck\` action=check (verify endpoints are healthy) -> \`aws_ecs\` action=describe (check deployment rollout state) -> \`aws_ecs\` action=events (check for errors) -> \`aws_ecs\` action=wait (wait for stable if deployment in progress). This ensures the build actually landed and is serving traffic.
+*Building + verifying:* **USE \`jenkins_build_verify\`** target="ui" verify=true — triggers build, polls until done, runs healthchecks in 1 call. **Always run via bg-runner agent** (blocks for minutes). Only use separate \`jenkins_build\` + \`jenkins_status\` when you need to check status independently or abort mid-build.
 
 **Background agent for long-running operations:**
 The \`bg-runner\` agent runs dev-tools MCP calls in the background so you can keep working. **Use it for any operation that blocks >30s:**
-- \`jenkins_build\` + \`jenkins_status\` polling (build lifecycle)
+- \`jenkins_build_verify\` (the preferred way — build + poll + healthcheck in one call)
 - \`aws_ecs\` action=wait (deployment stability, up to 300s)
-- Post-build verification chain (healthcheck + ECS describe/events/wait)
 - Any future long-polling MCP tool call
 
 **How:** \`Agent(subagent_type="dev-tools:bg-runner", run_in_background=true, prompt="trigger and monitor jenkins build for ui staging")\`
 You will be notified when the background task completes.
 
-*Git:* \`git_command\` action=status | action=diff | action=log count=5 | action=add files="src/foo.ts" | action=commit message="feat: add feature" files="src/foo.ts" | action=amend message="fix: typo" | action=branch_list all=true | action=tag target="v1.0.0" | action=show commit="abc123" | action=switch target="feature" create=true | action=pull | action=push | action=merge_to target="staging" push=true
+**Individual tools (use when combined tools don't fit):**
 
-*Git (combined):* \`git_ship\` message="feat: add X" files="src/foo.ts" push=true merge_to="a-staging" — stages, commits, pushes, and merges in 1 call. Use instead of sequential git_command calls when shipping code.
+*AWS:* \`aws_sso_status\` -> \`aws_sso_refresh\` (if expired) -> \`aws_ecs\` action=list_clusters | action=list_services cluster="sandbox-cluster" | action=search pattern="open-api" | action=describe cluster="dotnet-sandbox-cluster" service="my-service" | action=events | action=tasks | action=logs | action=restart confirm=true | action=update desiredCount=1 confirm=true | action=wait
+
+*Jenkins (individual):* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` -> \`jenkins_status\` -> \`jenkins_abort\`
+
+*Git (individual):* \`git_command\` action=status | action=diff | action=log | action=switch | action=stash | action=branch_list | action=tag | action=show | action=amend | action=rebase | action=cherry_pick | action=reset_soft | action=fetch | action=branch_cleanup
 
 *Worktree:* \`git_worktree\` action=list | action=add path="../feature-branch" branch="feature" | action=remove path="../feature-branch"
 

@@ -64,7 +64,7 @@
     },
     {
       "name": "feature-sprint",
-      "version": "0.8.2",
+      "version": "0.8.3",
       "description": "Scope-driven feature development. /sprint for one-shot features. /sprint-loop for long-lived sessions with dynamic agent scaling (spawn on demand, message-driven, idle = free).",
       "source": "./plugins/feature-sprint",
       "author": {

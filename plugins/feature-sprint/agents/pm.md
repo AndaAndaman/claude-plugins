@@ -33,6 +33,7 @@ tools:
   - LS
   - SendMessage
   - TaskList
+  - TaskCreate
   - TaskGet
   - TaskUpdate
 ---

@@ -43,13 +43,21 @@ export function registerGitShipTool(server: McpServer): void {
 
       // Step 2: Check there's something to commit
       const { stdout: staged } = git('diff', '--cached', '--stat');
-      if (!staged) return errorResult('Nothing to commit (no staged changes).');
+      const hasCommit = !!staged;
 
-      // Step 3: Commit
-      const commitResult = git('commit', '-m', message);
-      if (!commitResult.ok) return errorResult(`Commit failed: ${commitResult.stderr}`);
-      const { stdout: logLine } = git('log', '-1', '--oneline');
-      lines.push(`Committed: ${logLine}`);
+      if (!hasCommit && !mergeTo) {
+        return errorResult('Nothing to commit (no staged changes) and no merge_to target.');
+      }
+
+      // Step 3: Commit (skip if nothing staged — just push/merge)
+      if (hasCommit) {
+        const commitResult = git('commit', '-m', message);
+        if (!commitResult.ok) return errorResult(`Commit failed: ${commitResult.stderr}`);
+        const { stdout: logLine } = git('log', '-1', '--oneline');
+        lines.push(`Committed: ${logLine}`);
+      } else {
+        lines.push('Nothing to commit — proceeding to push/merge');
+      }
 
       // Step 4: Push
       if (shouldPush || mergeTo) {

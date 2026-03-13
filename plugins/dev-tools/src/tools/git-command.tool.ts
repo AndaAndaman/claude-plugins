@@ -14,6 +14,16 @@ function mergeTo(target: string, push?: boolean): string {
 
   const lines: string[] = [`Merging ${branch} → ${target}`];
 
+  // Push source branch first (so remote has all commits before merging)
+  if (push) {
+    const pushSource = git('push', '-u', 'origin', branch);
+    if (pushSource.ok) {
+      lines.push(`Pushed ${branch} to origin`);
+    } else {
+      lines.push(`Warning: push ${branch} failed: ${pushSource.stderr}`);
+    }
+  }
+
   // Switch to target
   const checkout = git('checkout', target);
   if (!checkout.ok) return `Error switching to ${target}: ${checkout.stderr}`;

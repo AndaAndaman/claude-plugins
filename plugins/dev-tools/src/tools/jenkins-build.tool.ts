@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { defineTool, textResult, errorResult } from '../shared/mcp-helpers.js';
-import { BUILD_TARGETS, triggerBuild, resolveQueue, getBuildStatus, loadJenkinsConfig, getEffectiveDefaults, setLastBuild } from '../shared/jenkins.js';
+import { BUILD_TARGETS, triggerBuild, resolveQueue, getBuildStatus, loadJenkinsConfig, getEffectiveDefaults, setLastBuild, STAGING_JOBS, PREPROD_JOBS } from '../shared/jenkins.js';
 
 export const registerJenkinsBuildTool = (server: McpServer): void => {
   defineTool(
@@ -10,6 +10,7 @@ export const registerJenkinsBuildTool = (server: McpServer): void => {
     `Trigger a Jenkins build. Targets: ${Object.keys(BUILD_TARGETS).join(', ')}. Example: {target: "ui"} or {target: "api", params: '{"COMMIT_HASH":"main"}'}`,
     {
       target: z.string().describe(`Build target: ${Object.keys(BUILD_TARGETS).join(', ')}`),
+      environment: z.enum(['staging', 'preprod']).optional().describe('Build environment. Overrides config for this build (default: from config)'),
       params: z.string().optional().describe('JSON overrides, e.g. {"COMMIT_HASH":"main"}'),
     },
     async (input) => {
@@ -30,6 +31,13 @@ export const registerJenkinsBuildTool = (server: McpServer): void => {
 
       const bt = BUILD_TARGETS[target];
       const config = loadJenkinsConfig();
+
+      // Override environment for this build if specified (without saving to config file)
+      if (input.environment) {
+        config.environment = input.environment as 'staging' | 'preprod';
+        config.jobPaths = config.environment === 'preprod' ? { ...PREPROD_JOBS } : { ...STAGING_JOBS };
+      }
+
       const merged = { ...getEffectiveDefaults(target, bt, config), ...params };
 
       const lines: string[] = [

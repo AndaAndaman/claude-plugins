@@ -5,10 +5,8 @@ argument-hint: "[target] [environment]"
 allowed-tools:
   - AskUserQuestion
   - Agent
-  - mcp__plugin_dev-tools_dev-tools__git_ship
   - mcp__plugin_dev-tools_dev-tools__git_command
   - mcp__plugin_dev-tools_dev-tools__jenkins_build_verify
-  - mcp__plugin_dev-tools_dev-tools__jenkins_list_targets
 ---
 
 # Deploy Command
@@ -45,31 +43,28 @@ Which service to build?
 | `api`, `api-report`, `api-doc`, `api-profile`, `open-api` | `canary-staging` | `canary-preprod` |
 | `lambda-pdf-preview`, `lambda-pdf-gen` | `a-staging` | `a-preprod` |
 
-### 3. Ship code (1 call)
+### 3. Ship code
 
-Use `git_ship` to push and merge in one call:
+Check status first with `git_command action=status`.
 
+**If clean (nothing to commit):**
 ```
-git_ship message="" push=true merge_to="<resolved-branch>"
-```
-
-Note: `message` is required but we're not committing new changes — if there are no staged changes, skip `git_ship` and use `git_command action=push` then `git_command action=merge_to target=<branch> push=true` instead.
-
-**Simpler approach:** Check status first with `git_command action=status`. If clean, just push + merge:
-```
-git_command action=push
 git_command action=merge_to target="<resolved-branch>" push=true
 ```
+This pushes current branch and merges to the target in 1 call.
 
-If dirty, ask user to commit or stash first.
+**If dirty (uncommitted changes):**
+Ask the user to commit or stash first. Do NOT auto-stash.
 
 ### 4. Build + verify (1 call via bg-runner)
 
 Run in background so user can keep working:
 
 ```
-Agent(subagent_type="dev-tools:bg-runner", run_in_background=true, prompt="Use jenkins_build_verify with target=<target> verify=true. Report the full result.")
+Agent(subagent_type="dev-tools:bg-runner", run_in_background=true, prompt="Use jenkins_build_verify with target=<target> environment=<environment> verify=true. Report the full result.")
 ```
+
+**CRITICAL: NEVER call jenkins_build_verify directly — it blocks for minutes. ALWAYS use bg-runner agent.**
 
 ### 5. Report
 

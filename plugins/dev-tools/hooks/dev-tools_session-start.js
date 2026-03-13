@@ -21,9 +21,9 @@ Available MCP tools for AWS operations:
 - \`jenkins_configure\` - Set Jenkins URL, user, token, environment (staging/preprod)
 - \`jenkins_edit_config\` - View/set/remove/reset per-target default overrides
 - \`jenkins_list_targets\` - Show available build targets with default parameters
-- \`jenkins_build\` - Trigger a build (ui, api, api-report, api-doc, api-profile, open-api, lambda-pdf-preview, lambda-pdf-gen). Automatically resolves queue to build number (blocks up to 90s).
-- \`jenkins_build_verify\` - **Combined workflow:** trigger build + poll until complete + run healthchecks — all in 1 call. Use this instead of sequential jenkins_build → jenkins_status → healthcheck. Example: {target: "ui", verify: true}. **Always run via bg-runner agent** (blocks for minutes).
-- \`jenkins_status\` - Check build status + console output. If no URL provided, checks last triggered build.
+- \`jenkins_build\` - Trigger a build (ui, api, api-report, api-doc, api-profile, open-api, lambda-pdf-preview, lambda-pdf-gen). Accepts optional \`environment\` param ("staging"|"preprod"). Resolves queue to build number (blocks up to 90s).
+- \`jenkins_build_verify\` - **Combined workflow:** trigger build + poll until complete + run healthchecks — all in 1 call. Use this instead of sequential jenkins_build → jenkins_status → healthcheck. Accepts optional \`environment\` param ("staging"|"preprod"). Example: {target: "ui", environment: "staging", verify: true}. **Always run via bg-runner agent** (blocks for minutes).
+- \`jenkins_status\` - Check build status + console output. **One-off check only — NEVER call in a loop to poll.** Use \`jenkins_build_verify\` instead.
 - \`jenkins_abort\` - Abort/cancel a running build or queued item
 
 **Git Workflow:**
@@ -41,7 +41,9 @@ Available MCP tools for AWS operations:
 
 *Shipping code:* **USE \`git_ship\`** message="feat: add X" files="src/foo.ts" push=true merge_to="a-staging" — stages, commits, pushes, and merges in 1 call. Only fall back to \`git_command\` for individual operations (status, diff, log, switch, stash, etc.).
 
-*Building + verifying:* **USE \`jenkins_build_verify\`** target="ui" verify=true — triggers build, polls until done, runs healthchecks in 1 call. **Always run via bg-runner agent** (blocks for minutes). Only use separate \`jenkins_build\` + \`jenkins_status\` when you need to check status independently or abort mid-build.
+*Building + verifying:* **USE \`jenkins_build_verify\`** target="ui" verify=true — triggers build, polls until done, runs healthchecks in 1 call. **Always run via bg-runner agent** (blocks for minutes). Only use separate \`jenkins_build\` when you need to abort mid-build.
+
+**NEVER loop-call \`jenkins_status\` to poll build progress** — each call costs 25K+ tokens of base context. Use \`jenkins_build_verify\` which polls internally in 1 call. Only use \`jenkins_status\` for a single one-off check (e.g., "what's the status of build #1234?").
 
 **Background agent for long-running operations:**
 The \`bg-runner\` agent runs dev-tools MCP calls in the background so you can keep working. **Use it for any operation that blocks >30s:**
@@ -56,7 +58,7 @@ You will be notified when the background task completes.
 
 *AWS:* \`aws_sso_status\` -> \`aws_sso_refresh\` (if expired) -> \`aws_ecs\` action=list_clusters | action=list_services cluster="sandbox-cluster" | action=search pattern="open-api" | action=describe cluster="dotnet-sandbox-cluster" service="my-service" | action=events | action=tasks | action=logs | action=restart confirm=true | action=update desiredCount=1 confirm=true | action=wait
 
-*Jenkins (individual):* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` -> \`jenkins_status\` -> \`jenkins_abort\`
+*Jenkins (individual):* \`jenkins_configure\` (set token once) -> \`jenkins_list_targets\` -> \`jenkins_build\` -> \`jenkins_status\` (one-off only, NEVER loop) -> \`jenkins_abort\`
 
 *Git (individual):* \`git_command\` action=status | action=diff | action=log | action=switch | action=stash | action=branch_list | action=tag | action=show | action=amend | action=rebase | action=cherry_pick | action=reset_soft | action=fetch | action=branch_cleanup
 

@@ -63,10 +63,11 @@ You are a background task runner for dev-tools MCP operations. You execute long-
 
 ## Common tasks
 
-**Jenkins build + monitor:**
-1. `jenkins_build` target=X → gets queue URL, resolves to build number
-2. `jenkins_status` → poll until build completes (SUCCESS/FAILURE)
-3. Report: "Build #N SUCCESS/FAILURE" + last few console lines if failed
+**Jenkins build + monitor (PREFERRED — 1 call):**
+1. `jenkins_build_verify` target=X environment=Y verify=true → triggers, polls, healthchecks — all in 1 call
+2. Report the full result
+
+**NEVER loop-call `jenkins_status` to poll.** Use `jenkins_build_verify` instead.
 
 **Post-build verification:**
 1. `healthcheck` action=check

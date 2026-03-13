@@ -18,13 +18,13 @@ export interface JenkinsConfig {
   targetDefaults?: Record<string, Record<string, string>>;
 }
 
-const STAGING_JOBS = {
+export const STAGING_JOBS: Record<string, string> = {
   ui: 'staging/job/workspace/job/frontend',
   api: 'staging/job/dotnet/job/dotnet.arm64',
   lambda: 'staging/job/workspace/job/serverless',
 };
 
-const PREPROD_JOBS = {
+export const PREPROD_JOBS: Record<string, string> = {
   ui: 'preprod/job/workspace/job/frontend',
   api: 'preprod/job/dotnet/job/dotnet.arm64',
   lambda: 'preprod/job/workspace/job/serverless',

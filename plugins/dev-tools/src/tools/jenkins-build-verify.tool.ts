@@ -9,6 +9,8 @@ import {
   loadJenkinsConfig,
   getEffectiveDefaults,
   setLastBuild,
+  STAGING_JOBS,
+  PREPROD_JOBS,
 } from '../shared/jenkins.js';
 import { getEndpoints } from '../shared/healthcheck.js';
 
@@ -47,6 +49,7 @@ export function registerJenkinsBuildVerifyTool(server: McpServer): void {
     `Trigger Jenkins build, wait for completion, and run post-build healthchecks — all in one call. Targets: ${Object.keys(BUILD_TARGETS).join(', ')}. Example: {target: "ui", verify: true}`,
     {
       target: z.string().describe(`Build target: ${Object.keys(BUILD_TARGETS).join(', ')}`),
+      environment: z.enum(['staging', 'preprod']).optional().describe('Build environment. Overrides config for this build (default: from config)'),
       params: z.string().optional().describe('JSON overrides, e.g. {"COMMIT_HASH":"main"}'),
       verify: z.boolean().optional().describe('Run healthchecks after build succeeds (default: true)'),
       poll_timeout: z.coerce.number().optional().describe('Max seconds to wait for build completion (default: 600)'),
@@ -73,6 +76,13 @@ export function registerJenkinsBuildVerifyTool(server: McpServer): void {
 
       const bt = BUILD_TARGETS[target];
       const config = loadJenkinsConfig();
+
+      // Override environment for this build if specified (without saving to config file)
+      if (input.environment) {
+        config.environment = input.environment as 'staging' | 'preprod';
+        config.jobPaths = config.environment === 'preprod' ? { ...PREPROD_JOBS } : { ...STAGING_JOBS };
+      }
+
       const merged = { ...getEffectiveDefaults(target, bt, config), ...params };
 
       const lines: string[] = [
